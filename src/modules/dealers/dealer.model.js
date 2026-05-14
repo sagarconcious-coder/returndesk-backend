@@ -74,14 +74,16 @@ export const getDealerByMobile = async (mobile) => {
 };
 
 // getAllDealers(status)
-export const getAllDealers = async (status) => {
+export const getAllDealers = async (status = null) => {
   // → SELECT from dealers WHERE status=? (optional filter)
-
-  const result = await pool.query(
-    `SELECT  * FROM dealers
-        WHERE status=$1`,
-    [status],
-  );
+  let query = `SELECT * FROM dealers`;
+  const params = [];
+  if (status) {
+    query += ` WHERE status=$1`;
+    params.push(status);
+  }
+  query += " ORDER BY created_at DESC";
+  const result = await pool.query(query, params);
   return result.rows;
 };
 
