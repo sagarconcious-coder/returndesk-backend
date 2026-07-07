@@ -1,3 +1,4 @@
+import { successResponse } from "../../common/utils/response.util.js";
 import {
   requestOtp,
   verifyOtp,
@@ -6,79 +7,102 @@ import {
   getDealerById,
   approveDealer,
   rejectDealer,
+  loginDealer,
 } from "./dealer.service.js";
-// POST /api/dealers/request-otp
 
+// POST /api/dealers/request-otp
 export const requestOtpController = async (req, res, next) => {
   try {
-    const { mobile } = req.body;
-    const result = await requestOtp(mobile);
-    res.status(200).json(result);
+    console.log("OTP requested................");
+    const { email } = req.body;
+    const result = await requestOtp(email);
+    successResponse(res, result, "OTP sent");
   } catch (error) {
     next(error);
   }
 };
-// POST /api/dealers/verify-otp
 
+// POST /api/dealers/verify-otp
 export const verifyOtpController = async (req, res, next) => {
   try {
-    const { mobile, otp } = req.body;
-    const result = await verifyOtp(mobile, otp);
-    res.status(200).json(result);
+    const { email, otp } = req.body;
+    const result = await verifyOtp(email, otp);
+    successResponse(res, result, "OTP verified");
   } catch (error) {
     next(error);
   }
 };
-// POST /api/dealers/register
 
+// POST /api/dealers/register
 export const registerDealerController = async (req, res, next) => {
   try {
-    const { token, ...data } = req.body;
+    const token = req.headers.authorization?.split(" ")[1];
+    const data = req.body;
     const result = await registerDealer(token, data);
-    return res.status(201).json(result);
+    const { message, dealer } = result;
+    successResponse(res, dealer, message, 201);
   } catch (error) {
     next(error);
   }
 };
-// GET /api/admin/dealers
 
+// GET /api/dealers/admin
 export const getDealersController = async (req, res, next) => {
   try {
     const { status } = req.query;
     const dealers = await getDealers(status);
-    res.status(200).json(dealers);
+    successResponse(res, dealers, "Dealers fetched successfully");
   } catch (error) {
     next(error);
   }
 };
-// GET /api/admin/dealers/:id
 
+// GET /api/dealers/admin/:id
 export const getDealerByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const dealer = await getDealerById(id);
-    return res.status(200).json(dealer);
+    successResponse(res, dealer, "Dealer fetched successfully");
   } catch (error) {
     next(error);
   }
 };
-// PUT /api/admin/dealers/:id/approve
 
+// PUT /api/dealers/admin/:id/approve
 export const approveDealerController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const dealer = await approveDealer(id);
-    res.status(200).json({ message: "Dealer approved", dealer });
+    successResponse(res, dealer, "Dealer approved");
   } catch (error) {
     next(error);
   }
 };
-// PUT api/admin/dealer/:id/reject
+
+// PUT /api/dealers/admin/:id/reject
 export const rejectDealerController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const dealer = await rejectDealer(id, req.body.reason);
-    res.status(200).json({ message: "Dealer Rejected", dealer });
+    const { reason } = req.body;
+    const dealer = await rejectDealer(id, reason);
+    successResponse(res, dealer, "Dealer rejected");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/dealers/login
+
+export const loginDealerController = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      const error = new Error("Email and password are required");
+      error.statusCode = 400;
+      throw error;
+    }
+    const result = await loginDealer(email, password);
+    successResponse(res, result, "Login Successful");
   } catch (error) {
     next(error);
   }

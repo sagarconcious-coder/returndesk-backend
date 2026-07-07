@@ -3,24 +3,18 @@ import {
   requestOtpController,
   verifyOtpController,
   registerDealerController,
-  getDealersController,
-  getDealerByIdController,
-  approveDealerController,
-  rejectDealerController,
+  loginDealerController,
 } from "./dealers.controller.js";
+import { authenticate } from "../../common/middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// Public routes
+// Public routes — no auth required
 router.post("/request-otp", requestOtpController);
 router.post("/verify-otp", verifyOtpController);
 router.post("/register", registerDealerController);
 
-// Admin routes
-
-router.get("/admin", getDealersController);
-router.get("/admin/:id", getDealerByIdController);
-router.put("/admin/:id/approve", approveDealerController);
-router.put("/admin/:id/reject", rejectDealerController);
+// Dealer routes - require valid JWT
+router.post("/login", loginDealerController);
 
 export default router;

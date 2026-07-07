@@ -1,115 +1,194 @@
+import jwt from "jsonwebtoken";
+import logger from "../../config/logger.js";
+import bcrypt from "bcrypt";
 import {
-  getDealerByMobile,
+  DEALER_STATUS,
+  OTP_PURPOSE,
+} from "../../common/constants/status.constants.js";
+import { generateOtp, getOtpExpiry } from "../../common/utils/otp.util.js";
+import { sendOtpEmail } from "../../common/utils/email.utils.js";
+import {
   createOtp,
   getValidOtp,
   markOtpVerified,
   createDealer,
+  getDealerByEmail,
   getAllDealers,
-  getDealerById as getDealerFromDb,
+  getDealerById as getDealerByIdFromRepo,
   updateDealerStatus,
-} from "./dealer.model.js";
-import logger from "../../config/logger.js";
-import jwt from "jsonwebtoken";
+} from "./dealer.repository.js";
 
-//////////////////////////////////////////////////////////////// A) requestOtp(mobile)
-export const requestOtp = async (mobile) => {
-  // 1. Check if dealer already ACTIVE with getDealerByMobile → throw error if yes
-  const dealer = await getDealerByMobile(mobile);
-  if (dealer && dealer.status === "ACTIVE") {
-    throw new Error("Dealer already ACTIVE");
+/////////////////////////////////////////////////////////////////////////////////////// A) requestOtp(email)
+// → generates OTP, saves to DB, logs it (no email service yet)
+export const requestOtp = async (email) => {
+  // 1. Block if dealer is already ACTIVE
+  const dealer = await getDealerByEmail(email);
+  if (dealer && dealer.status === DEALER_STATUS.ACTIVE) {
+    const error = new Error("Dealer is already active");
+    error.statusCode = 409;
+    throw error;
   }
 
-  // 2. Generate 6-digit OTP: Math.floor(1_00_000 + Math.random() * 9_00_000).toString()
-  const otp = Math.floor(Math.random() * 9_00_000 + 1_00_000).toString();
+  // 2. Generate OTP and expiry (10 min)
+  const otp = generateOtp();
+  const expiresAt = getOtpExpiry(10);
 
-  // 3. Set expiresAt = new Date(Date.now() + 10 * 60 * 1000)  ← 10 minutes
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  // 3. Persist OTP
+  await createOtp(email, otp, expiresAt);
 
-  // 4. Call createOtp(mobile, otp, expiresAt)
-  const result = await createOtp(mobile, otp, expiresAt);
+  try {
+    // 4. Log OTP (replace with email integration later)
+    // logger.info(`OTP for ${email}: ${otp}`);
+    await sendOtpEmail(email, otp);
+  } catch {
+    const emailError = new Error("Failed to send OTP email, Please Try again");
+    emailError.statusCode = 502;
+    throw emailError;
+  }
 
-  // 5. Log OTP using logger (no SMS yet)
-  logger.info(`OTP for ${mobile}: ${otp}`);
-
-  // 6. Return { message: 'OTP sent' }
-  return { message: "OTP sent", otp };
+  return { message: "OTP sent" };
 };
 
-////////////////////////////////////////////////////////// B) verifyOtp(mobile, otp)
-export const verifyOtp = async (mobile, otp) => {
-  // 1. Call getValidOtp(mobile, otp) → throw error if not found
-
-  const otpRecord = await getValidOtp(mobile, otp);
+///////////////////////////////////////////////////////////////////////////////////////  B) verifyOtp(email, otp)
+// → validates OTP, marks it verified, returns a short-lived JWT
+export const verifyOtp = async (email, otp) => {
+  // 1. Fetch valid (unexpired, unverified) OTP record
+  const otpRecord = await getValidOtp(email, otp);
   if (!otpRecord) {
-    throw new Error("INVALID OTP");
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
   }
-  // 2. Call markOtpVerified(otpRecord.id)
+
+  // 2. Mark OTP as used so it cannot be replayed
   await markOtpVerified(otpRecord.id);
 
-  // 3. Sign a JWT: { mobile, purpose: 'REGISTRATION' }, expires in 15 minutes
+  // 3. Issue a 15-min registration token
   const token = jwt.sign(
-    { mobile: mobile, purpose: "REGISTRATION" },
+    { email, purpose: OTP_PURPOSE.REGISTRATION },
     process.env.JWT_SECRET,
     { expiresIn: "15m" },
   );
-  // 4. Return { token }
   return { token };
 };
 
-//////////////////////////////////////////////////////// C) registerDealer(token, data)
+/////////////////////////////////////////////////////////////////////////////////////// C) registerDealer(token, data)
+// → verifies registration JWT, creates dealer record
 export const registerDealer = async (token, data) => {
-  // 1. Verify JWT token → extract mobile
+  // 1. Verify the JWT issued after OTP verification
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    throw new Error("Invalid or expired token");
-  }
-  const { mobile } = decoded;
-  // 2. Check dealer doesn't already exist with getDealerByMobile → throw if exists
+  } catch {
+    const error = new Error(
+      "Registration session expired, please request a new OTP",
+    );
 
-  const dealer = await getDealerByMobile(mobile);
-  if (dealer) {
-    throw new Error("Dealer already exists");
+    error.statusCode = 401;
+    throw error;
   }
-  // 3. Call createDealer({ ...data, mobile })
-  const newDealer = await createDealer({ ...data, mobile });
 
-  // 4. Return the new dealer
-  return { message: "Dealer registered successfully", dealer: newDealer };
+  // 2. Ensure token was issued for registration (not some other purpose)
+  if (decoded.purpose !== OTP_PURPOSE.REGISTRATION) {
+    const error = new Error("Token not valid for registration");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  // 3. Prevent duplicate registration
+  const existing = await getDealerByEmail(decoded.email);
+  if (existing) {
+    const error = new Error("Dealer already registered");
+    error.statusCode = 409;
+    throw error;
+  }
+  const hashedPassword = await bcrypt.hash(data.password, 10);
+  // 4. Create dealer (email comes from verified token, not request body)
+  const dealer = await createDealer({
+    ...data,
+    email: decoded.email,
+    password: hashedPassword,
+  });
+  return { message: "Registration submitted, pending approval", dealer };
 };
 
-///////////////////////////////////////////////// D) getDealers(status['ACTIVE','PENDING','INACTIVE'])
-
+/////////////////////////////////////////////////////////////////////////////////////// D) getDealers(status)
+// → returns all dealers, optionally filtered by status: PENDING | ACTIVE | REJECTED
 export const getDealers = async (status = null) => {
-  // → call getAllDealers(status), return result
-  const dealers = await getAllDealers(status);
-  return dealers;
+  return getAllDealers(status);
 };
 
-//////////////////////////////////////////////////////// E) getDealerById(id)
+// E) getDealerById(id)
+// → returns single dealer or throws 404
 export const getDealerById = async (id) => {
-  // → call getDealerById(id), throw error if not found, return dealer
-
-  const dealer = await getDealerFromDb(id);
+  const dealer = await getDealerByIdFromRepo(id);
   if (!dealer) {
-    throw new Error(`Dealer doesn't exist `);
+    const error = new Error("Dealer not found");
+    error.statusCode = 404;
+    throw error;
   }
   return dealer;
 };
 
-///////////////////////////////////////////////////////////// F) approveDealer(id)
-// → call updateDealerStatus(id, 'ACTIVE', null), return updated dealer
+// F) approveDealer(id)
+// → sets dealer status to ACTIVE
 export const approveDealer = async (id) => {
-  const dealer = await updateDealerStatus(id, "ACTIVE", null);
-
+  const dealer = await updateDealerStatus(id, DEALER_STATUS.ACTIVE, null);
+  if (!dealer) {
+    const error = new Error("Dealer not found");
+    error.statusCode = 404;
+    throw error;
+  }
   return dealer;
 };
 
-/////////////////////////////////////////////// G) rejectDealer(id, reason)
+// G) rejectDealer(id, reason)
+// → sets dealer status to REJECTED with a reason
 export const rejectDealer = async (id, reason) => {
-  // → call updateDealerStatus(id, 'REJECTED', reason), return updated dealer
-
-  const dealer = await updateDealerStatus(id, "REJECTED", reason);
+  const dealer = await updateDealerStatus(id, DEALER_STATUS.REJECTED, reason);
+  if (!dealer) {
+    const error = new Error("Dealer not found");
+    error.statusCode = 404;
+    throw error;
+  }
   return dealer;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////// loginDealer
+
+export const loginDealer = async (email, password) => {
+  const dealer = await getDealerByEmail(email);
+
+  //// A) If dealer doens't exist
+  if (!dealer) {
+    const error = new Error("Invalid email or password");
+    error.statusCode = 401;
+    throw error;
+  }
+  //// B) If exists, but is not Active (pending)
+  if (dealer.status !== DEALER_STATUS.ACTIVE) {
+    const error = new Error("Account is not active yet");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  //// C) Check password matches
+  const isMathch = await bcrypt.compare(password, dealer.password);
+  if (!isMathch) {
+    const error = new Error("Invalid email or password");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const token = jwt.sign(
+    {
+      dealerId: dealer.id,
+      email: dealer.email,
+      role: "dealer",
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" },
+  );
+
+  return { token, username: dealer.full_name };
 };

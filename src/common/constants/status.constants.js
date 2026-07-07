@@ -1,0 +1,15 @@
+export const DEALER_STATUS = {
+  PENDING: "PENDING",
+  ACTIVE: "ACTIVE",
+  REJECTED: "REJECTED",
+};
+
+export const RMA_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+};
+
+export const OTP_PURPOSE = {
+  REGISTRATION: "REGISTRATION",
+};
