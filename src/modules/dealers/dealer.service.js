@@ -182,7 +182,7 @@ export const loginDealer = async (email, password) => {
 
   const token = jwt.sign(
     {
-      dealerId: dealer.id,
+      dealer_id: dealer.id,
       email: dealer.email,
       role: "dealer",
     },

@@ -11,12 +11,8 @@ export const env = {
   JWT_SECRET: required("JWT_SECRET"),
   S3_ENDPOINT: process.env.S3_ENDPOINT, // optional — omit for real AWS, set for R2/MinIO
   S3_REGION: process.env.S3_REGION || "auto",
-  // S3_BUCKET: required("S3_BUCKET"),
-  // S3_ACCESS_KEY_ID: required("S3_ACCESS_KEY_ID"),
-  // S3_SECRET_ACCESS_KEY: required("S3_SECRET_ACCESS_KEY"),
-  // S3_PUBLIC_URL: required("S3_PUBLIC_URL"), // base URL used to build the public file_url, e.g. bucket's public domain or CDN
-  S3_BUCKET: "S3_BUCKET",
-  S3_ACCESS_KEY_ID: "S3_ACCESS_KEY_ID",
-  S3_SECRET_ACCESS_KEY: "S3_SECRET_ACCESS_KEY",
-  S3_PUBLIC_URL: "S3_PUBLIC_URL",
+  S3_BUCKET: required("S3_BUCKET"),
+  S3_ACCESS_KEY_ID: required("S3_ACCESS_KEY_ID"),
+  S3_SECRET_ACCESS_KEY: required("S3_SECRET_ACCESS_KEY"),
+  S3_PUBLIC_URL: required("S3_PUBLIC_URL"), // base URL used to build the public file_url, e.g. bucket's public domain or CDN
 };

@@ -8,7 +8,11 @@ export const WARRANTY_STATUS = {
 export const rmaSchema = {
   table: "rmas",
   columns: {
-    id: { type: "UUID", primaryKey: true, default: "gen_random_uuid()" },
+    id: {
+      type: "UUID",
+      primaryKey: true,
+      default: "gen_random_uuid()",
+    },
     rma_number: {
       type: "VARCHAR(50)",
       required: true,
@@ -20,7 +24,11 @@ export const rmaSchema = {
         LPAD(nextval('rma_number_seq')::text, 6, '0')
       `,
     },
-    dealer_id: { type: "UUID", required: true, references: "dealers(id)" },
+    dealer_id: {
+      type: "UUID",
+      required: true,
+      references: "dealers(id)",
+    },
     product_serial: { type: "VARCHAR(100)", required: true },
     product_name: { type: "VARCHAR(255)", required: true },
     issue_type: { type: "VARCHAR(50)" },
@@ -32,7 +40,7 @@ export const rmaSchema = {
     },
     warranty_expiry: { type: "DATE" },
     status: {
-      type: "VARCHAR(20)",
+      type: "VARCHAR(30)",
       default: RMA_STATUS.PENDING,
       enum: Object.values(RMA_STATUS),
     },

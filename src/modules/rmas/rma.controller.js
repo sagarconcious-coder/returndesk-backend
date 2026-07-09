@@ -7,6 +7,8 @@ import {
   approveRma,
   rejectRma,
 } from "./rma.service.js";
+import { getShipmentsByRmaId } from "../shipments/shipment.service.js";
+import { getRepairByRmaId } from "../repairs/repair.service.js";
 
 // POST /api/rmas/create
 export const createRmaController = async (req, res, next) => {
@@ -41,9 +43,36 @@ export const createRmaController = async (req, res, next) => {
 // GET /api/rmas/:id
 export const getRmaByIdController = async (req, res, next) => {
   try {
-    const { id } = req.user.dealer_id;
-    const rma = await getRmaById(id);
+    const { id } = req.params;
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    const rma = await getRmaById(id, dealer_id);
     successResponse(res, rma, "RMA fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/rmas/:id/shipments
+export const getRmaShipmentsController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    await getRmaById(id, dealer_id); // 404s if missing, 403s if not owned by the caller
+    const shipments = await getShipmentsByRmaId(id);
+    successResponse(res, shipments, "Shipments fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/rmas/:id/repair
+export const getRmaRepairController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    await getRmaById(id, dealer_id); // 404s if missing, 403s if not owned by the caller
+    const repair = await getRepairByRmaId(id);
+    successResponse(res, repair, "Repair fetched successfully");
   } catch (error) {
     next(error);
   }
@@ -53,7 +82,7 @@ export const getRmaByIdController = async (req, res, next) => {
 export const getRmasByDealerIdController = async (req, res, next) => {
   try {
     const { status } = req.query;
-    const dealer_id = req.user.dealerId;
+    const dealer_id = req.user.dealer_id;
     const rmas = await getRmasByDealerId(dealer_id, status);
     successResponse(res, rmas, "RMAs fetched successfully");
   } catch (error) {
