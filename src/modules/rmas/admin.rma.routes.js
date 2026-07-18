@@ -5,6 +5,7 @@ import {
 } from "../../common/middleware/auth.middleware.js";
 import {
   getAllRmasController,
+  getAdminRmaByIdController,
   approveRmaController,
   rejectRmaController,
 } from "./rma.controller.js";
@@ -12,6 +13,7 @@ import {
 const router = express.Router();
 
 router.get("/", authenticate, requireAdmin, getAllRmasController);
+router.get("/:id", authenticate, requireAdmin, getAdminRmaByIdController);
 router.put("/:id/approve", authenticate, requireAdmin, approveRmaController);
 router.put("/:id/reject", authenticate, requireAdmin, rejectRmaController);
 

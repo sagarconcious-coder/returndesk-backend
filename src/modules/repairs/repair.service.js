@@ -5,6 +5,7 @@ import {
 import {
   createRepair as createRepairInRepo,
   getRepairByRmaId as getRepairByRmaIdFromRepo,
+  getAllRepairs as getAllRepairsFromRepo,
   updateRepair as updateRepairInRepo,
 } from "./repair.repository.js";
 import { getRmaById } from "../rmas/rma.repository.js";
@@ -47,6 +48,11 @@ export const startRepair = async (rma_id, technician_name) => {
   return updated;
 };
 
+//////////////////////////// Admin list of all repairs, optionally filtered by status
+export const getAllRepairs = async (status) => {
+  return getAllRepairsFromRepo(status);
+};
+
 //////////////////////////// Search for repair (using rma_id)
 export const getRepairByRmaId = async (rma_id) => {
   const repair = await getRepairByRmaIdFromRepo(rma_id);
@@ -56,6 +62,13 @@ export const getRepairByRmaId = async (rma_id) => {
     throw error;
   }
   return repair;
+};
+
+// Same lookup, but returns null instead of throwing — for callers assembling
+// a composite view (e.g. RMA detail) where "no repair yet" is a valid state
+export const getRepairByRmaIdOrNull = async (rma_id) => {
+  const repair = await getRepairByRmaIdFromRepo(rma_id);
+  return repair ?? null;
 };
 
 // Admin updates repair progress (diagnosis, parts, notes) without changing terminal status

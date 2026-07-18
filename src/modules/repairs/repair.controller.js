@@ -2,10 +2,22 @@ import { successResponse } from "../../common/utils/response.util.js";
 import {
   startRepair,
   getRepairByRmaId,
+  getAllRepairs,
   updateRepairProgress,
   completeRepair,
   markUnrepairable,
 } from "./repair.service.js";
+
+// GET /api/admin/repairs?status=IN_PROGRESS
+export const getAllRepairsController = async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    const repairs = await getAllRepairs(status);
+    successResponse(res, repairs, "Repairs fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
 
 // POST /api/admin/repairs/:rma_id/start
 export const startRepairController = async (req, res, next) => {

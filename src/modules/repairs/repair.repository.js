@@ -18,6 +18,23 @@ export const getRepairByRmaId = async (rma_id) => {
   return result.rows[0];
 };
 
+/////////////////////// GET ALL REPAIRS (admin list), optionally filtered by status
+export const getAllRepairs = async (status = null) => {
+  const params = [];
+  let query = `
+    SELECT repairs.*, rmas.rma_number, rmas.product_name, rmas.product_serial
+    FROM repairs
+    JOIN rmas ON rmas.id = repairs.rma_id
+  `;
+  if (status) {
+    params.push(status);
+    query += ` WHERE repairs.status = $1`;
+  }
+  query += ` ORDER BY repairs.created_at DESC`;
+  const result = await pool.query(query, params);
+  return result.rows;
+};
+
 /////////////////////// GET ALL REPAIRS DONE FOR SPECIFIC DEALER
 export const getRepairsByDealerId = async (dealer_id) => {
   const result = await pool.query(
@@ -43,7 +60,7 @@ export const updateRepair = async (rma_id, fields) => {
     parts_used,
     repair_notes,
     started_at,
-    created_at,
+    completed_at,
   } = fields;
   const result = await pool.query(
     `
@@ -58,6 +75,7 @@ export const updateRepair = async (rma_id, fields) => {
     updated_at = NOW()
     WHERE rma_id = $8
     RETURNING *
+    
     `,
     [
       technician_name ?? null,

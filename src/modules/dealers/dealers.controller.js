@@ -8,6 +8,9 @@ import {
   approveDealer,
   rejectDealer,
   loginDealer,
+  getMyProfile,
+  updateMyProfile,
+  changeMyPassword,
 } from "./dealer.service.js";
 
 // POST /api/dealers/request-otp
@@ -103,6 +106,40 @@ export const loginDealerController = async (req, res, next) => {
     }
     const result = await loginDealer(email, password);
     successResponse(res, result, "Login Successful");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/dealers/profile
+export const getProfileController = async (req, res, next) => {
+  try {
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    const profile = await getMyProfile(dealer_id);
+    successResponse(res, profile, "Profile fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/dealers/profile
+export const updateProfileController = async (req, res, next) => {
+  try {
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    const profile = await updateMyProfile(dealer_id, req.body);
+    successResponse(res, profile, "Profile updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/dealers/profile/change-password
+export const changePasswordController = async (req, res, next) => {
+  try {
+    const dealer_id = req.user?.dealerId || req.user?.dealer_id;
+    const { current_password, new_password } = req.body;
+    const result = await changeMyPassword(dealer_id, current_password, new_password);
+    successResponse(res, result, "Password changed successfully");
   } catch (error) {
     next(error);
   }

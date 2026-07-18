@@ -1,17 +1,19 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, ""),
+  },
+});
 
 export const sendOtpEmail = async (email, otp) => {
-  try {
-    const { data, error } = await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: `${email}`,
-      subject: "Dealer Registration OTP",
-      html: `<p>Your OTP is <strong>${otp}</strong>!</p>`,
-    });
-    if (error) throw new Error(`Email failed: ${error.message}`);
-  } catch (error) {
-    throw new Error(error);
-  }
+  const res = await transporter.sendMail({
+    from: process.env.GMAIL_USER,
+    to: email,
+    subject: "Dealer Registration OTP",
+    html: `<p>Your OTP is <strong>${otp}</strong>!</p>`,
+  });
+  return res;
 };

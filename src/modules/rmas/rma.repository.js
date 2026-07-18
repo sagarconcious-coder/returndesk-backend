@@ -10,13 +10,19 @@ export const createRma = async (data) => {
     purchase_date,
     warranty_status,
     warranty_expiry,
+    pickup_same_as_profile,
+    pickup_address_line1,
+    pickup_city,
+    pickup_state,
+    pickup_pincode,
   } = data;
   const result = await pool.query(
     `INSERT INTO rmas (
        dealer_id, product_serial, product_name, issue_type,
-       issue_description, purchase_date, warranty_status, warranty_expiry
+       issue_description, purchase_date, warranty_status, warranty_expiry,
+       pickup_same_as_profile, pickup_address_line1, pickup_city, pickup_state, pickup_pincode
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
     [
       dealer_id,
       product_serial,
@@ -26,6 +32,11 @@ export const createRma = async (data) => {
       purchase_date,
       warranty_status,
       warranty_expiry,
+      pickup_same_as_profile ?? true,
+      pickup_address_line1 ?? null,
+      pickup_city ?? null,
+      pickup_state ?? null,
+      pickup_pincode ?? null,
     ],
   );
   return result.rows[0];
@@ -48,19 +59,33 @@ export const createRmaAttachments = async (rma_id, attachments) => {
 };
 
 export const getRmaById = async (id) => {
-  const result = await pool.query(
-    `SELECT * FROM rmas WHERE id = $1`,
-    [id],
-  );
+  const result = await pool.query(`SELECT * FROM rmas WHERE id = $1`, [id]);
   return result.rows[0];
 };
 
-export const getRmaByNumber = async (rma_number) => {
+export const getRmaAttachments = async (rma_id) => {
   const result = await pool.query(
-    `SELECT * FROM rmas WHERE rma_number = $1`,
-    [rma_number],
+    `SELECT * FROM rma_attachments WHERE rma_id = $1 ORDER BY created_at ASC`,
+    [rma_id],
   );
+  return result.rows;
+};
+
+export const getRmaByNumber = async (rma_number) => {
+  const result = await pool.query(`SELECT * FROM rmas WHERE rma_number = $1`, [
+    rma_number,
+  ]);
   return result.rows[0];
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Accepts either the UUID id or the human-readable rma_number (e.g. "RMA-2026-000123")
+export const getRmaByIdOrNumber = async (identifier) => {
+  return UUID_RE.test(identifier)
+    ? getRmaById(identifier)
+    : getRmaByNumber(identifier);
 };
 
 export const getRmasByDealerId = async (dealer_id, status = null) => {
@@ -75,12 +100,31 @@ export const getRmasByDealerId = async (dealer_id, status = null) => {
   return result.rows;
 };
 
-export const getAllRmas = async (status = null) => {
-  let query = `SELECT * FROM rmas`;
+export const getRecentRmasByDealerId = async (dealer_id, limit) => {
+  const result = await pool.query(
+    `SELECT * FROM rmas WHERE dealer_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    [dealer_id, limit],
+  );
+  return result.rows;
+};
+
+export const getAllRmas = async (status = null, dealer_id = null) => {
   const params = [];
+  const conditions = [];
+
   if (status) {
-    query += ` WHERE status = $1`;
     params.push(status);
+    conditions.push(`status = $${params.length}`);
+    // query += ` WHERE status = $1`;
+  }
+  if (dealer_id) {
+    // query += ` AND WHERE dealer_id = $2`;
+    params.push(dealer_id);
+    conditions.push(`dealer_id  = $${params.length}`);
+  }
+  let query = `SELECT * FROM rmas`;
+  if (conditions.length) {
+    query += ` WHERE ${conditions.join(" AND ")}`;
   }
   query += ` ORDER BY created_at DESC`;
   const result = await pool.query(query, params);

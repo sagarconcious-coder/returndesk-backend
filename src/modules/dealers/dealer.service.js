@@ -15,11 +15,17 @@ import {
   getDealerByEmail,
   getAllDealers,
   getDealerById as getDealerByIdFromRepo,
+  getDealerByIdWithPassword,
   updateDealerStatus,
+  updateDealerProfile as updateDealerProfileInRepo,
+  updateDealerPassword,
+  getLatestOtp,
 } from "./dealer.repository.js";
 
 /////////////////////////////////////////////////////////////////////////////////////// A) requestOtp(email)
 // → generates OTP, saves to DB, logs it (no email service yet)
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
+
 export const requestOtp = async (email) => {
   // 1. Block if dealer is already ACTIVE
   const dealer = await getDealerByEmail(email);
@@ -28,9 +34,25 @@ export const requestOtp = async (email) => {
     error.statusCode = 409;
     throw error;
   }
+  // 1 b)
+  const existingOtp = await getLatestOtp(email);
+  if (existingOtp) {
+    const secondsSinceLastSend =
+      (Date.now() - new Date(existingOtp.created_at).getTime()) / 1000;
+    const cooldown = OTP_RESEND_COOLDOWN_SECONDS;
+    if (secondsSinceLastSend < cooldown) {
+      const waitseconds = Math.ceil(cooldown - secondsSinceLastSend);
+      const error = new Error(
+        `Please wait ${waitseconds}s before requesting another OTP`,
+      );
+      error.statusCode = 429;
+      error.retryAfter = waitseconds;
+      throw error;
+    }
+  }
 
   // 2. Generate OTP and expiry (10 min)
-  const otp = generateOtp();
+  const otp = generateOtp(); //123456
   const expiresAt = getOtpExpiry(10);
 
   // 3. Persist OTP
@@ -46,7 +68,7 @@ export const requestOtp = async (email) => {
     throw emailError;
   }
 
-  return { message: "OTP sent" };
+  return { message: "OTP sent", retryAfter: OTP_RESEND_COOLDOWN_SECONDS };
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////  B) verifyOtp(email, otp)
@@ -192,3 +214,76 @@ export const loginDealer = async (email, password) => {
 
   return { token, username: dealer.full_name };
 };
+
+/////////////////////////////////////////////////////////////////////////////////////// getMyProfile(dealer_id)
+// → returns the dealer's own profile, reshaped for the frontend (full_name -> name)
+export const getMyProfile = async (dealer_id) => {
+  const dealer = await getDealerById(dealer_id);
+  return serializeProfile(dealer);
+};
+
+/////////////////////////////////////////////////////////////////////////////////////// updateMyProfile(dealer_id, data)
+// → dealer edits their own name/mobile/business info; email and gst_number are not editable here
+export const updateMyProfile = async (dealer_id, data) => {
+  const {
+    full_name,
+    mobile,
+    business_name,
+    address_line1,
+    city,
+    state,
+    pincode,
+  } = data;
+  const dealer = await updateDealerProfileInRepo(dealer_id, {
+    full_name,
+    mobile,
+    business_name,
+    address_line1,
+    city,
+    state,
+    pincode,
+  });
+  if (!dealer) {
+    const error = new Error("Dealer not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return serializeProfile(dealer);
+};
+
+/////////////////////////////////////////////////////////////////////////////////////// changeMyPassword(dealer_id, current_password, new_password)
+export const changeMyPassword = async (
+  dealer_id,
+  current_password,
+  new_password,
+) => {
+  const dealer = await getDealerByIdWithPassword(dealer_id);
+  if (!dealer) {
+    const error = new Error("Dealer not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const isMatch = await bcrypt.compare(current_password, dealer.password);
+  if (!isMatch) {
+    const error = new Error("Current password is incorrect");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const hashedPassword = await bcrypt.hash(new_password, 10);
+  await updateDealerPassword(dealer_id, hashedPassword);
+  return { message: "Password changed successfully" };
+};
+
+const serializeProfile = (dealer) => ({
+  name: dealer.full_name,
+  email: dealer.email,
+  mobile: dealer.mobile,
+  business_name: dealer.business_name,
+  address_line1: dealer.address_line1,
+  city: dealer.city,
+  state: dealer.state,
+  pincode: dealer.pincode,
+  gst_number: dealer.gst_number,
+});

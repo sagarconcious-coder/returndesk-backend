@@ -8,12 +8,15 @@ import {
 import {
   startRepairController,
   getRepairController,
+  getAllRepairsController,
   updateRepairController,
   completeRepairController,
   markUnrepairableController,
 } from "./repair.controller.js";
 
 const router = express.Router();
+
+router.get("/", authenticate, requireAdmin, getAllRepairsController);
 
 router.post(
   "/:rma_id/start",

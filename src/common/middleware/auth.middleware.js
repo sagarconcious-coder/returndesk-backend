@@ -18,20 +18,27 @@ export const authenticate = (req, res, next) => {
     req.user = decoded;
     next();
   } catch {
-    return res
-      .status(401)
-      .json({
-        success: false,
-        message: "Unauthorized: Invalid or expired token",
-      });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: Invalid or expired token",
+    });
   }
 };
 
 export const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== "admin") {
+  if (req.user?.role !== "admin" && req.user?.role !== "super_admin") {
     return res
       .status(403)
       .json({ success: false, message: "Forbidden: Admins only" });
   }
   next();
+};
+
+export const requireSuperAdmin = (req, res, next) => {
+  if (req.user?.role !== "super_admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Forbidden: Super Admins only",
+    });
+  }
 };
