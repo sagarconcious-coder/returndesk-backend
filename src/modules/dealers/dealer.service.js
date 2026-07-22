@@ -9,7 +9,8 @@ import { generateOtp, getOtpExpiry } from "../../common/utils/otp.util.js";
 import { sendOtpEmail } from "../../common/utils/email.utils.js";
 import {
   createOtp,
-  getValidOtp,
+  getPendingOtp,
+  incrementOtpAttempts,
   markOtpVerified,
   createDealer,
   getDealerByEmail,
@@ -21,6 +22,8 @@ import {
   updateDealerPassword,
   getLatestOtp,
 } from "./dealer.repository.js";
+
+const MAX_OTP_ATTEMPTS = 5;
 
 /////////////////////////////////////////////////////////////////////////////////////// A) requestOtp(email)
 // → generates OTP, saves to DB, logs it (no email service yet)
@@ -74,9 +77,26 @@ export const requestOtp = async (email) => {
 ///////////////////////////////////////////////////////////////////////////////////////  B) verifyOtp(email, otp)
 // → validates OTP, marks it verified, returns a short-lived JWT
 export const verifyOtp = async (email, otp) => {
-  // 1. Fetch valid (unexpired, unverified) OTP record
-  const otpRecord = await getValidOtp(email, otp);
+  // 1. Fetch the pending (unexpired, unverified) OTP record for this email,
+  //    regardless of whether the submitted code matches — we need it either
+  //    way to enforce the attempt cap.
+  const otpRecord = await getPendingOtp(email);
   if (!otpRecord) {
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+    const error = new Error(
+      "Too many incorrect attempts — please request a new OTP",
+    );
+    error.statusCode = 429;
+    throw error;
+  }
+
+  if (otpRecord.otp !== otp) {
+    await incrementOtpAttempts(otpRecord.id);
     const error = new Error("Invalid or expired OTP");
     error.statusCode = 400;
     throw error;

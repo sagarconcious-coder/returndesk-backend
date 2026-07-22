@@ -66,6 +66,7 @@ export const updateAdminRole = async (id, role) => {
     `
       UPDATE admins SET role = $1 , updated_at = NOW()
       WHERE id = $2
+      RETURNING id,name,email,role,status,created_at,updated_at
     `,
     [role, id],
   );

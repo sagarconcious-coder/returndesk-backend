@@ -13,11 +13,12 @@ import {
   requireAdmin,
   requireSuperAdmin,
 } from "../../common/middleware/auth.middleware.js";
+import { loginLimiter } from "../../common/middleware/rateLimit.middleware.js";
 
 const router = express.Router();
 
 //////////// Login Admin
-router.post("/login", loginAdminController);
+router.post("/login", loginLimiter, loginAdminController);
 router.get(
   "/dashboard/stats",
   authenticate,

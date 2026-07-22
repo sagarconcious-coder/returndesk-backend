@@ -24,7 +24,10 @@ import {
   notifyRmaRejected,
 } from "../notifications/notification.service.js";
 import { getRepairByRmaIdOrNull } from "../repairs/repair.service.js";
-import { getShipmentsByRmaId } from "../shipments/shipment.service.js";
+import {
+  getShipmentsByRmaId,
+  getShipmentsByRmaIdWithHistory,
+} from "../shipments/shipment.service.js";
 
 import {
   serializeRmaDetail,
@@ -118,29 +121,6 @@ export const createRma = async (dealer_id, rmaData) => {
   return rma;
 };
 
-// Resolves the pickup address to use for an RMA: the dealer's registered
-// profile address, or the custom address entered for this RMA
-export const resolvePickupAddress = (dealer, rma) =>
-  rma.pickup_same_as_profile
-    ? {
-        address_line1: dealer.address_line1,
-        city: dealer.city,
-        state: dealer.state,
-        pincode: dealer.pincode,
-        name: dealer.full_name,
-        phone: dealer.mobile,
-        email: dealer.email,
-      }
-    : {
-        address_line1: rma.pickup_address_line1,
-        city: rma.pickup_city,
-        state: rma.pickup_state,
-        pincode: rma.pickup_pincode,
-        name: dealer.full_name,
-        phone: dealer.mobile,
-        email: dealer.email,
-      };
-
 // B) getRmaById(id, requesting_dealer_id)
 // → returns single RMA or throws 404
 // → when requesting_dealer_id is passed (dealer-facing routes), throws 403
@@ -201,7 +181,7 @@ export const getRmaDetail = async (identifier, requesting_dealer_id = null) => {
 
   const [repair, shipments, attachments] = await Promise.all([
     getRepairByRmaIdOrNull(rma.id),
-    getShipmentsByRmaId(rma.id),
+    getShipmentsByRmaIdWithHistory(rma.id),
     getRmaAttachments(rma.id),
   ]);
 
@@ -262,6 +242,11 @@ export const approveRma = async (id) => {
   }
 
   const rma = await updateRmaStatus(id, RMA_STATUS.APPROVED, null);
+  if (!rma) {
+    const error = new Error("Cannot approve — RMA status changed concurrently");
+    error.statusCode = 409;
+    throw error;
+  }
   await notifyRmaApproved(rma);
   return rma;
 };
@@ -284,6 +269,11 @@ export const rejectRma = async (id, reason) => {
   }
 
   const rma = await updateRmaStatus(id, RMA_STATUS.REJECTED, reason);
+  if (!rma) {
+    const error = new Error("Cannot reject — RMA status changed concurrently");
+    error.statusCode = 409;
+    throw error;
+  }
   await notifyRmaRejected(rma);
   return rma;
 };

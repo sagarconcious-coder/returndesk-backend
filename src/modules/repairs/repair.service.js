@@ -1,7 +1,4 @@
-import {
-  REPAIR_STATUS,
-  RMA_STATUS,
-} from "../../common/constants/status.constants.js";
+import { REPAIR_STATUS } from "../../common/constants/status.constants.js";
 import {
   createRepair as createRepairInRepo,
   getRepairByRmaId as getRepairByRmaIdFromRepo,
@@ -15,7 +12,10 @@ import {
   notifyRepairUnrepairable,
 } from "../notifications/notification.service.js";
 
-// Admin starts a repair — RMA must be APPROVED, and no repair should exist yet
+// Admin starts a repair — the repair row is auto-created (PENDING) when the
+// inbound shipment is marked DELIVERED, so this just promotes it to
+// IN_PROGRESS. Rejects if the item hasn't arrived yet (no repair row) or if
+// it's already past PENDING.
 export const startRepair = async (rma_id, technician_name) => {
   const rma = await getRmaById(rma_id);
   if (!rma) {
@@ -23,22 +23,21 @@ export const startRepair = async (rma_id, technician_name) => {
     error.statusCode = 404;
     throw error;
   }
-  if (rma.status !== RMA_STATUS.APPROVED) {
+
+  const existing = await getRepairByRmaIdFromRepo(rma_id);
+  if (!existing) {
     const error = new Error(
-      `Cannot start repair — RMA status is ${rma.status}`,
+      "Cannot start repair — item has not been delivered yet",
     );
     error.statusCode = 403;
     throw error;
   }
-
-  const existing = await getRepairByRmaIdFromRepo(rma_id);
-  if (existing) {
-    const error = new Error("Repair already exists for this RMA");
+  if (existing.status !== REPAIR_STATUS.PENDING) {
+    const error = new Error("Repair already started for this RMA");
     error.statusCode = 409;
     throw error;
   }
 
-  const repair = await createRepairInRepo(rma_id);
   const updated = await updateRepairInRepo(rma_id, {
     technician_name,
     status: REPAIR_STATUS.IN_PROGRESS,

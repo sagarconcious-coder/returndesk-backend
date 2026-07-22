@@ -1,4 +1,4 @@
-import { successResponse } from "../../common/utils/response.util.js";
+import { successResponse, errorResponse } from "../../common/utils/response.util.js";
 import {
   createShipment,
   getAllShipments,
@@ -6,9 +6,13 @@ import {
   updateShipmentStatus,
   getMyShipments,
   trackShipmentByNumber,
+} from "./shipment.service.js";
+import {
   requestPickupForRmas,
   retryPickupForShipment,
-} from "./shipment.service.js";
+  cancelPickupForShipment,
+  handleShiprocketTrackingWebhook,
+} from "./pickup.service.js";
 
 // GET /api/admin/shipments?status=IN_TRANSIT&direction=INBOUND
 export const getAllShipmentsController = async (req, res, next) => {
@@ -101,6 +105,37 @@ export const retryPickupForShipmentController = async (req, res, next) => {
     const { id } = req.params;
     const shipment = await retryPickupForShipment(id);
     successResponse(res, shipment, "Pickup retried successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/admin/shipments/:id/cancel-pickup
+export const cancelPickupForShipmentController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const shipment = await cancelPickupForShipment(id);
+    successResponse(res, shipment, "Pickup cancelled successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/admin/shipments/webhook/shiprocket
+// → called by Shiprocket (not an admin), so it's verified via a shared
+//   secret header instead of the usual JWT auth middleware
+export const shiprocketWebhookController = async (req, res, next) => {
+  try {
+    const providedSecret = req.headers["x-webhook-secret"];
+    if (
+      !process.env.SHIPROCKET_WEBHOOK_SECRET ||
+      providedSecret !== process.env.SHIPROCKET_WEBHOOK_SECRET
+    ) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const result = await handleShiprocketTrackingWebhook(req.body);
+    successResponse(res, result, "Webhook processed");
   } catch (error) {
     next(error);
   }

@@ -41,4 +41,5 @@ export const requireSuperAdmin = (req, res, next) => {
       message: "Forbidden: Super Admins only",
     });
   }
+  next();
 };

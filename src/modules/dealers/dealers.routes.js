@@ -22,16 +22,21 @@ import {
   markAllNotificationsReadUiController,
 } from "../notifications/notification.controller.js";
 import { authenticate } from "../../common/middleware/auth.middleware.js";
+import {
+  loginLimiter,
+  otpRequestLimiter,
+  otpVerifyLimiter,
+} from "../../common/middleware/rateLimit.middleware.js";
 
 const router = express.Router();
 
 // * NOTE: These are all the routes that the dealers will face
 
 /////////////////////////////////////////////////////////////// 1) Public routes — no auth required
-router.post("/request-otp", requestOtpController);
-router.post("/verify-otp", verifyOtpController);
+router.post("/request-otp", otpRequestLimiter, requestOtpController);
+router.post("/verify-otp", otpVerifyLimiter, verifyOtpController);
 router.post("/register", registerDealerController);
-router.post("/login", loginDealerController);
+router.post("/login", loginLimiter, loginDealerController);
 
 //////////////////////////////////////////////////////////////// 2)  Dealer routes - require valid JWT
 router.get("/dashboard/stats", authenticate, getDashboardStatsController);

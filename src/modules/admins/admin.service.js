@@ -9,7 +9,6 @@ import {
   updateAdminStatus as updateAdminStatusInRepo,
 } from "./admin.repository.js";
 import { env } from "../../config/env.js";
-import { create } from "axios";
 import {
   ADMIN_ROLE,
   ADMIN_STATUS,
@@ -36,6 +35,7 @@ export async function loginAdmin(email, password) {
   if (admin.status !== "ACTIVE") {
     const err = new Error("This admin account has been deactivated");
     err.statusCode = 403;
+    throw err;
   }
   ////////////// 4) Both email and password mathces , so generate token (jwt)
 
@@ -76,7 +76,7 @@ export const createAdmin = async ({ name, email, password, role }) => {
     name,
     email,
     password: hashed,
-    role: role || ADMIN_ROLE.admin,
+    role: role || ADMIN_ROLE.ADMIN,
   });
   return admin;
 };
@@ -94,11 +94,11 @@ export const deactivateAdmin = async (id, requesting_admin_id) => {
     throw err;
   }
 
-  return updateAdminStatusInRepo(id, ADMINI_STATUS.INACTIVE);
+  return updateAdminStatusInRepo(id, ADMIN_STATUS.INACTIVE);
 };
 
 export const reactivateAdmin = async (id) => {
-  updateAdminStatusInRepo(id, ADMIN_STATUS.ACTIVE);
+  return updateAdminStatusInRepo(id, ADMIN_STATUS.ACTIVE);
 };
 
 export const updateAdminRole = async (id, role, requesting_admin_id) => {

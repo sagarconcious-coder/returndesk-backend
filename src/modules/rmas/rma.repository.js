@@ -135,7 +135,7 @@ export const updateRmaStatus = async (id, status, rejection_reason = null) => {
   const result = await pool.query(
     `UPDATE rmas
      SET status = $1, rejection_reason = $2, updated_at = NOW()
-     WHERE id = $3 RETURNING *`,
+     WHERE id = $3 AND status = 'PENDING' RETURNING *`,
     [status, rejection_reason, id],
   );
   return result.rows[0];

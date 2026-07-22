@@ -9,6 +9,8 @@ import {
   getShipmentsByRmaIdController,
   requestPickupForRmasController,
   retryPickupForShipmentController,
+  cancelPickupForShipmentController,
+  shiprocketWebhookController,
   updateShipmentController,
 } from "./shipment.controller.js";
 
@@ -17,6 +19,12 @@ const router = express.Router();
 
 ///////////////////////////////////// 0) list all shipments
 router.get("/", authenticate, requireAdmin, getAllShipmentsController);
+
+///////////////////////////////////// 0b) Shiprocket tracking webhook — called by
+///////////////////////////////////// Shiprocket itself, verified by shared secret
+///////////////////////////////////// instead of admin JWT. Registered before the
+///////////////////////////////////// "/:rma_id" catch-all below so it isn't swallowed by it.
+router.post("/webhook/shiprocket", shiprocketWebhookController);
 
 ///////////////////////////////////// 1) pickup request endpoint
 router.post(
@@ -32,6 +40,14 @@ router.post(
   authenticate,
   requireAdmin,
   retryPickupForShipmentController,
+);
+
+///////////////////////////////////// 1c) cancel a requested pickup
+router.post(
+  "/:id/cancel-pickup",
+  authenticate,
+  requireAdmin,
+  cancelPickupForShipmentController,
 );
 
 ////////////////////////////////////// 2) Create Shipment endpoint

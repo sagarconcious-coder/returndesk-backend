@@ -103,17 +103,14 @@ export const registerPickupLocation = async (address) => {
 
 // Creates a Shiprocket adhoc order for a shipment, then assigns a courier/AWB.
 // customer: { name, email, phone, address_line1, city, state, pincode } — the delivery address
-export const createOrder = async ({
-  pickup_location,
-  order_id,
-  customer,
-}) => {
+export const createOrder = async ({ pickup_location, order_id, customer }) => {
   const token = await getToken();
 
   // Shiprocket requires first/last name as separate fields
   const nameParts = (customer.name || "").trim().split(/\s+/);
   const billing_customer_name = nameParts[0] || "Dealer";
-  const billing_last_name = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "NA";
+  const billing_last_name =
+    nameParts.length > 1 ? nameParts.slice(1).join(" ") : "NA";
 
   let orderRes;
   try {
@@ -134,7 +131,12 @@ export const createOrder = async ({
         billing_phone: customer.phone,
         shipping_is_billing: true,
         order_items: [
-          { name: "RMA Return Item", sku: "RMA-RETURN", units: 1, selling_price: 1 },
+          {
+            name: "RMA Return Item",
+            sku: "RMA-RETURN",
+            units: 1,
+            selling_price: 1,
+          },
         ],
         payment_method: "Prepaid",
         sub_total: 1,
@@ -153,6 +155,7 @@ export const createOrder = async ({
   }
 
   const shipment_id = orderRes.data?.shipment_id;
+  const shiprocket_order_id = orderRes.data?.order_id;
   if (!shipment_id) {
     throw new Error(
       `Shiprocket order creation did not return a shipment_id: ${JSON.stringify(orderRes.data)}`,
@@ -166,9 +169,33 @@ export const createOrder = async ({
 
   return {
     shipment_id: String(shipment_id),
+    order_id: shiprocket_order_id ? String(shiprocket_order_id) : null,
     awb_code,
     error: awbError,
   };
+};
+
+// Cancels a Shiprocket order (used when an admin cancels a pickup that was
+// already requested). Takes Shiprocket's own order_id — NOT our order_id
+// param above and NOT the shipment_id — that's what their /orders/cancel
+// endpoint expects.
+export const cancelOrder = async (shiprocket_order_id) => {
+  const token = await getToken();
+
+  try {
+    await axios.post(
+      `${BASE_URL}/orders/cancel`,
+      { ids: [Number(shiprocket_order_id)] },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (error) {
+    logger.error(
+      `Shiprocket orders/cancel failed: ${JSON.stringify(error.response?.data || error.message)}`,
+    );
+    throw error;
+  }
+
+  logger.info(`Shiprocket order cancelled: ${shiprocket_order_id}`);
 };
 
 // Assigns a courier/AWB to an already-created Shiprocket order (shipment_id).

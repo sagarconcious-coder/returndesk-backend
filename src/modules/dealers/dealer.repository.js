@@ -2,21 +2,32 @@ import pool from "../../config/db.js";
 
 export const createOtp = async (email, otp, expiresAt) => {
   const result = await pool.query(
-    `INSERT INTO otps (email, otp, expires_at, verified)
-     VALUES ($1, $2, $3, false)
+    `INSERT INTO otps (email, otp, expires_at, verified, attempts)
+     VALUES ($1, $2, $3, false, 0)
      ON CONFLICT (email)
-     DO UPDATE SET otp = $2, expires_at = $3, verified = false
+     DO UPDATE SET otp = $2, expires_at = $3, verified = false, attempts = 0
      RETURNING *`,
     [email, otp, expiresAt],
   );
   return result.rows[0];
 };
 
-export const getValidOtp = async (email, otp) => {
+// Returns the pending (unverified, unexpired) OTP record for this email
+// regardless of whether the submitted code matches — callers need this to
+// track/increment wrong-attempt counts even on a mismatch.
+export const getPendingOtp = async (email) => {
   const result = await pool.query(
     `SELECT * FROM otps
-     WHERE email = $1 AND otp = $2 AND verified = false AND expires_at > NOW()`,
-    [email, otp],
+     WHERE email = $1 AND verified = false AND expires_at > NOW()`,
+    [email],
+  );
+  return result.rows[0];
+};
+
+export const incrementOtpAttempts = async (id) => {
+  const result = await pool.query(
+    `UPDATE otps SET attempts = attempts + 1 WHERE id = $1 RETURNING *`,
+    [id],
   );
   return result.rows[0];
 };

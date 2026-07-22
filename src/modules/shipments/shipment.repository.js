@@ -17,15 +17,21 @@ export const createShipmentForPickup = async (
   return result.rows[0];
 };
 
-///////////////////////////////////////////// 0b) Get existing INBOUND shipment for an RMA (if any)
+///////////////////////////////////////////// 0b) Get existing active (non-cancelled) shipment for an RMA+direction, if any
+// Mirrors the rma_shipments_one_active_inbound_per_rma / _outbound_per_rma
+// partial unique indexes — a CANCELLED shipment doesn't count as "already requested".
 
-export const getInboundShipmentByRmaId = async (rma_id, client = pool) => {
+export const getActiveShipmentByRmaId = async (rma_id, direction, client = pool) => {
   const result = await client.query(
-    `SELECT * FROM rma_shipments WHERE rma_id = $1 AND direction = 'INBOUND'`,
-    [rma_id],
+    `SELECT * FROM rma_shipments WHERE rma_id = $1 AND direction = $2 AND status != 'CANCELLED'`,
+    [rma_id, direction],
   );
   return result.rows[0];
 };
+
+// Kept as a thin wrapper — pickup.service.js already imports this name.
+export const getInboundShipmentByRmaId = async (rma_id, client = pool) =>
+  getActiveShipmentByRmaId(rma_id, "INBOUND", client);
 
 ///////////////////////////////////////////// 1) Function to create shipment
 export const createShipment = async (rma_id, direction) => {
@@ -111,6 +117,15 @@ export const getShipmentById = async (id) => {
   return result.rows[0];
 };
 
+//////////////////////////////////////// 3b) GET SINGLE SHIPMENT BY ITS SHIPROCKET AWB CODE
+export const getShipmentByAwb = async (awb_code) => {
+  const result = await pool.query(
+    `SELECT * FROM rma_shipments WHERE awb_code = $1`,
+    [awb_code],
+  );
+  return result.rows[0];
+};
+
 //////////////////////////////////////// 4) UPDATE SHIPMENT (carrier, tracking, status)
 export const updateShipment = async (id, fields) => {
   const { carrier, tracking_number, status, shipped_at, delivered_at } = fields;
@@ -141,21 +156,39 @@ export const updateShipment = async (id, fields) => {
 //////////////////////////////////////// 4b) STORE SHIPROCKET ORDER RESULT on a shipment
 export const setShipmentShiprocketInfo = async (
   id,
-  { shiprocket_shipment_id, awb_code },
+  { shiprocket_shipment_id, shiprocket_order_id, awb_code },
   client = pool,
 ) => {
   const result = await client.query(
     `
     UPDATE rma_shipments
     SET shiprocket_shipment_id = COALESCE($1, shiprocket_shipment_id),
-        awb_code = COALESCE($2, awb_code),
+        shiprocket_order_id = COALESCE($2, shiprocket_order_id),
+        awb_code = COALESCE($3, awb_code),
         updated_at = NOW()
-    WHERE id = $3
+    WHERE id = $4
     RETURNING *
     `,
-    [shiprocket_shipment_id ?? null, awb_code ?? null, id],
+    [shiprocket_shipment_id ?? null, shiprocket_order_id ?? null, awb_code ?? null, id],
   );
   return result.rows[0];
+};
+
+//////////////////////////////////////// 4b-2) RECORD a shipment status transition for the audit/history timeline
+export const insertShipmentStatusHistory = async (shipment_id, status) => {
+  await pool.query(
+    `INSERT INTO shipment_status_history (shipment_id, status) VALUES ($1, $2)`,
+    [shipment_id, status],
+  );
+};
+
+//////////////////////////////////////// 4b-3) GET the full status history timeline for a shipment
+export const getShipmentStatusHistory = async (shipment_id) => {
+  const result = await pool.query(
+    `SELECT status, created_at FROM shipment_status_history WHERE shipment_id = $1 ORDER BY created_at ASC`,
+    [shipment_id],
+  );
+  return result.rows;
 };
 
 //////////////////////////////////////// 4c) STORE/CLEAR the last pickup failure reason on a shipment

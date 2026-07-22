@@ -16,6 +16,7 @@ export const deriveStatusLabel = (rma, repair, shipments) => {
   );
   if (outbound?.status === SHIPMENT_STATUS.DELIVERED) return "Completed";
 
+  if (repair?.status === REPAIR_STATUS.PENDING) return "Repair Pending";
   if (repair?.status === REPAIR_STATUS.IN_PROGRESS) return "Under Repair";
   if (
     repair?.status === REPAIR_STATUS.COMPLETED ||
@@ -27,12 +28,11 @@ export const deriveStatusLabel = (rma, repair, shipments) => {
   const inbound = shipments.find(
     (s) => s.direction === SHIPMENT_DIRECTION.INBOUND,
   );
-  if (
-    inbound &&
-    inbound.status !== SHIPMENT_STATUS.NOT_SHIPPED &&
-    inbound.status !== SHIPMENT_STATUS.SCHEDULED
-  )
-    return "In Progress";
+  if (inbound?.status === SHIPMENT_STATUS.DELIVERED) return "In Aeidth";
+  if (inbound?.status === SHIPMENT_STATUS.OUT_FOR_DELIVERY) return "Out for Delivery";
+  if (inbound?.status === SHIPMENT_STATUS.IN_TRANSIT) return "In Transit";
+  if (inbound?.status === SHIPMENT_STATUS.PICKED_UP) return "Picked Up";
+  if (inbound?.status === SHIPMENT_STATUS.FAILED_DELIVERY) return "Delivery Failed";
   if (inbound?.status === SHIPMENT_STATUS.SCHEDULED) return "Pickup Scheduled";
   if (inbound) return "Pending Pickup";
 
@@ -125,21 +125,34 @@ const buildStatusHistory = (rma, repair, shipments) => {
   }
 
   for (const shipment of shipments) {
-    if (shipment.shipped_at) {
-      history.push({
-        date: formatDate(shipment.shipped_at),
-        status: "Shipped",
-        description: `${shipment.direction === SHIPMENT_DIRECTION.INBOUND ? "Inbound" : "Outbound"} shipment picked up`,
-        by: "System",
-      });
-    }
-    if (shipment.delivered_at) {
-      history.push({
-        date: formatDate(shipment.delivered_at),
-        status: "Delivered",
-        description: `${shipment.direction === SHIPMENT_DIRECTION.INBOUND ? "Inbound" : "Outbound"} shipment delivered`,
-        by: "System",
-      });
+    const leg = shipment.direction === SHIPMENT_DIRECTION.INBOUND ? "Inbound" : "Outbound";
+    if (shipment.status_history?.length) {
+      for (const entry of shipment.status_history) {
+        history.push({
+          date: formatDate(entry.created_at),
+          status: shipmentStatusLabel(entry.status),
+          description: `${leg} shipment: ${shipmentStatusLabel(entry.status)}`,
+          by: "System",
+        });
+      }
+    } else {
+      // Fallback for shipments recorded before shipment_status_history existed
+      if (shipment.shipped_at) {
+        history.push({
+          date: formatDate(shipment.shipped_at),
+          status: "Shipped",
+          description: `${leg} shipment picked up`,
+          by: "System",
+        });
+      }
+      if (shipment.delivered_at) {
+        history.push({
+          date: formatDate(shipment.delivered_at),
+          status: "Delivered",
+          description: `${leg} shipment delivered`,
+          by: "System",
+        });
+      }
     }
   }
 

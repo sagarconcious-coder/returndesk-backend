@@ -8,7 +8,6 @@ import {
   updateAdminRole,
 } from "./admin.service.js";
 import { successResponse } from "../../common/utils/response.util.js";
-import { create } from "axios";
 
 export async function loginAdminController(req, res, next) {
   try {
