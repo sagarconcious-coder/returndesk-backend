@@ -24,6 +24,23 @@ export const resolvePickupAddress = (dealer, rma) =>
         email: dealer.email,
       };
 
+/////////////////////////////////////////////// 1b) Resolves the delivery address for an outbound (warehouse -> dealer) shipment:
+// the shipment's own return address override (admin-entered at ship-back
+// time) if one was set, otherwise the same address the item was picked up
+// from (dealer's profile, or the RMA's custom pickup address).
+export const resolveReturnAddress = (dealer, rma, shipment) =>
+  shipment.return_address_same_as_pickup
+    ? resolvePickupAddress(dealer, rma)
+    : {
+        address_line1: shipment.return_address_line1,
+        city: shipment.return_address_city,
+        state: shipment.return_address_state,
+        pincode: shipment.return_address_pincode,
+        name: dealer.full_name,
+        phone: dealer.mobile,
+        email: dealer.email,
+      };
+
 // Resolves the Shiprocket pickup_location nickname for an address, reusing
 // the dealer's cached location when the RMA uses the dealer's profile
 // address (and caching a freshly registered one back onto the dealer), or

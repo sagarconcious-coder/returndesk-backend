@@ -34,13 +34,33 @@ export const getInboundShipmentByRmaId = async (rma_id, client = pool) =>
   getActiveShipmentByRmaId(rma_id, "INBOUND", client);
 
 ///////////////////////////////////////////// 1) Function to create shipment
-export const createShipment = async (rma_id, direction) => {
+// returnAddress is only meaningful for OUTBOUND shipments — see
+// shipment-address.helper.js's resolveReturnAddress for how it's used.
+export const createShipment = async (rma_id, direction, returnAddress = {}) => {
+  const {
+    return_address_same_as_pickup = true,
+    return_address_line1 = null,
+    return_address_city = null,
+    return_address_state = null,
+    return_address_pincode = null,
+  } = returnAddress;
+
   const result = await pool.query(
     `
-            INSERT INTO rma_shipments
-             (rma_id,direction) VALUES ($1,$2) RETURNING *
-        `,
-    [rma_id, direction],
+      INSERT INTO rma_shipments
+        (rma_id, direction, return_address_same_as_pickup, return_address_line1,
+         return_address_city, return_address_state, return_address_pincode)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
+    `,
+    [
+      rma_id,
+      direction,
+      return_address_same_as_pickup,
+      return_address_line1,
+      return_address_city,
+      return_address_state,
+      return_address_pincode,
+    ],
   );
 
   return result.rows[0];

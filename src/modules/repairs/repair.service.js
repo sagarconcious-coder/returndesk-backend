@@ -5,7 +5,7 @@ import {
   getAllRepairs as getAllRepairsFromRepo,
   updateRepair as updateRepairInRepo,
 } from "./repair.repository.js";
-import { getRmaById } from "../rmas/rma.repository.js";
+import { getRmaByIdOrNumber } from "../rmas/rma.repository.js";
 import {
   notifyRepairStarted,
   notifyRepairCompleted,
@@ -17,14 +17,14 @@ import {
 // IN_PROGRESS. Rejects if the item hasn't arrived yet (no repair row) or if
 // it's already past PENDING.
 export const startRepair = async (rma_id, technician_name) => {
-  const rma = await getRmaById(rma_id);
+  const rma = await getRmaByIdOrNumber(rma_id);
   if (!rma) {
     const error = new Error("RMA not found");
     error.statusCode = 404;
     throw error;
   }
 
-  const existing = await getRepairByRmaIdFromRepo(rma_id);
+  const existing = await getRepairByRmaIdFromRepo(rma.id);
   if (!existing) {
     const error = new Error(
       "Cannot start repair — item has not been delivered yet",
@@ -38,7 +38,7 @@ export const startRepair = async (rma_id, technician_name) => {
     throw error;
   }
 
-  const updated = await updateRepairInRepo(rma_id, {
+  const updated = await updateRepairInRepo(rma.id, {
     technician_name,
     status: REPAIR_STATUS.IN_PROGRESS,
     started_at: new Date(),
@@ -52,9 +52,10 @@ export const getAllRepairs = async (status) => {
   return getAllRepairsFromRepo(status);
 };
 
-//////////////////////////// Search for repair (using rma_id)
+//////////////////////////// Search for repair (using rma_id or rma_number)
 export const getRepairByRmaId = async (rma_id) => {
-  const repair = await getRepairByRmaIdFromRepo(rma_id);
+  const rma = await getRmaByIdOrNumber(rma_id);
+  const repair = rma ? await getRepairByRmaIdFromRepo(rma.id) : null;
   if (!repair) {
     const error = new Error("Repair not found");
     error.statusCode = 404;
@@ -72,7 +73,13 @@ export const getRepairByRmaIdOrNull = async (rma_id) => {
 
 // Admin updates repair progress (diagnosis, parts, notes) without changing terminal status
 export const updateRepairProgress = async (rma_id, fields) => {
-  const repair = await updateRepairInRepo(rma_id, fields);
+  const rma = await getRmaByIdOrNumber(rma_id);
+  if (!rma) {
+    const error = new Error("RMA not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const repair = await updateRepairInRepo(rma.id, fields);
   if (!repair) {
     const error = new Error("Repair not found");
     error.statusCode = 404;
@@ -83,7 +90,13 @@ export const updateRepairProgress = async (rma_id, fields) => {
 
 ////////////////// Mark a repair as complete
 export const completeRepair = async (rma_id, repair_notes) => {
-  const repair = await updateRepairInRepo(rma_id, {
+  const rma = await getRmaByIdOrNumber(rma_id);
+  if (!rma) {
+    const error = new Error("RMA not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const repair = await updateRepairInRepo(rma.id, {
     status: REPAIR_STATUS.COMPLETED,
     repair_notes,
     completed_at: new Date(),
@@ -93,7 +106,6 @@ export const completeRepair = async (rma_id, repair_notes) => {
     error.statusCode = 404;
     throw error;
   }
-  const rma = await getRmaById(rma_id);
   await notifyRepairCompleted(rma);
   return repair;
 };
@@ -101,7 +113,13 @@ export const completeRepair = async (rma_id, repair_notes) => {
 ////////////////// Mark a repair as Unrepairable
 
 export const markUnrepairable = async (rma_id, repair_notes) => {
-  const repair = await updateRepairInRepo(rma_id, {
+  const rma = await getRmaByIdOrNumber(rma_id);
+  if (!rma) {
+    const error = new Error("RMA not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const repair = await updateRepairInRepo(rma.id, {
     status: REPAIR_STATUS.UNREPAIRABLE,
     repair_notes,
     completed_at: new Date(),
@@ -111,7 +129,6 @@ export const markUnrepairable = async (rma_id, repair_notes) => {
     error.statusCode = 404;
     throw error;
   }
-  const rma = await getRmaById(rma_id);
   await notifyRepairUnrepairable(rma);
   return repair;
 };

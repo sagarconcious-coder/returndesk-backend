@@ -6,6 +6,7 @@ import {
   updateShipmentStatus,
   getMyShipments,
   trackShipmentByNumber,
+  retryOutboundShipment,
 } from "./shipment.service.js";
 import {
   requestPickupForRmas,
@@ -29,9 +30,26 @@ export const getAllShipmentsController = async (req, res, next) => {
 export const createShipmentController = async (req, res, next) => {
   try {
     const { rma_id } = req.params;
-    const { direction } = req.body;
-    const shipment = await createShipment(rma_id, direction);
-    successResponse(res, shipment, "Shipment created", 201);
+    const {
+      direction,
+      return_address_same_as_pickup,
+      return_address_line1,
+      return_address_city,
+      return_address_state,
+      return_address_pincode,
+    } = req.body;
+    const shipment = await createShipment(rma_id, direction, {
+      return_address_same_as_pickup,
+      return_address_line1,
+      return_address_city,
+      return_address_state,
+      return_address_pincode,
+    });
+    const message =
+      direction === "OUTBOUND" && !shipment.awb_code
+        ? `Shipment created, but courier assignment failed: ${shipment.pickup_error || "no AWB assigned"}`
+        : "Shipment created";
+    successResponse(res, shipment, message, 201);
   } catch (error) {
     next(error);
   }
@@ -105,6 +123,17 @@ export const retryPickupForShipmentController = async (req, res, next) => {
     const { id } = req.params;
     const shipment = await retryPickupForShipment(id);
     successResponse(res, shipment, "Pickup retried successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/admin/shipments/:id/retry-outbound
+export const retryOutboundShipmentController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const shipment = await retryOutboundShipment(id);
+    successResponse(res, shipment, "Outbound shipment retried successfully");
   } catch (error) {
     next(error);
   }

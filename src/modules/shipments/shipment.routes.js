@@ -9,6 +9,7 @@ import {
   getShipmentsByRmaIdController,
   requestPickupForRmasController,
   retryPickupForShipmentController,
+  retryOutboundShipmentController,
   cancelPickupForShipmentController,
   shiprocketWebhookController,
   updateShipmentController,
@@ -40,6 +41,14 @@ router.post(
   authenticate,
   requireAdmin,
   retryPickupForShipmentController,
+);
+
+///////////////////////////////////// 1b-2) retry Shiprocket registration for a stuck outbound shipment
+router.post(
+  "/:id/retry-outbound",
+  authenticate,
+  requireAdmin,
+  retryOutboundShipmentController,
 );
 
 ///////////////////////////////////// 1c) cancel a requested pickup

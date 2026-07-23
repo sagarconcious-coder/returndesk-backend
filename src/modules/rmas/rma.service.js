@@ -28,6 +28,7 @@ import {
   getShipmentsByRmaId,
   getShipmentsByRmaIdWithHistory,
 } from "../shipments/shipment.service.js";
+import { resolvePickupAddress } from "../shipments/shipment-address.helper.js";
 
 import {
   serializeRmaDetail,
@@ -179,13 +180,15 @@ export const getRmaDetail = async (identifier, requesting_dealer_id = null) => {
     throw error;
   }
 
-  const [repair, shipments, attachments] = await Promise.all([
+  const [repair, shipments, attachments, dealer] = await Promise.all([
     getRepairByRmaIdOrNull(rma.id),
     getShipmentsByRmaIdWithHistory(rma.id),
     getRmaAttachments(rma.id),
+    getDealerById(rma.dealer_id),
   ]);
+  const pickup_address = resolvePickupAddress(dealer, rma);
 
-  return serializeRmaDetail(rma, { repair, shipments, attachments });
+  return serializeRmaDetail(rma, { repair, shipments, attachments, pickup_address });
 };
 
 // H) getDashboardStats(dealer_id)
@@ -227,7 +230,7 @@ export const getRecentRmas = async (dealer_id, limit = 5) => {
 // E) approveRma(id)
 // → sets RMA status to APPROVED — only allowed while it's still PENDING
 export const approveRma = async (id) => {
-  const existing = await getRmaByIdFromRepo(id);
+  const existing = await getRmaByIdOrNumber(id);
   if (!existing) {
     const error = new Error("RMA not found");
     error.statusCode = 404;
@@ -241,7 +244,7 @@ export const approveRma = async (id) => {
     throw error;
   }
 
-  const rma = await updateRmaStatus(id, RMA_STATUS.APPROVED, null);
+  const rma = await updateRmaStatus(existing.id, RMA_STATUS.APPROVED, null);
   if (!rma) {
     const error = new Error("Cannot approve — RMA status changed concurrently");
     error.statusCode = 409;
@@ -254,7 +257,7 @@ export const approveRma = async (id) => {
 // F) rejectRma(id, reason)
 // → sets RMA status to REJECTED with a reason — only allowed while it's still PENDING
 export const rejectRma = async (id, reason) => {
-  const existing = await getRmaByIdFromRepo(id);
+  const existing = await getRmaByIdOrNumber(id);
   if (!existing) {
     const error = new Error("RMA not found");
     error.statusCode = 404;
@@ -268,7 +271,7 @@ export const rejectRma = async (id, reason) => {
     throw error;
   }
 
-  const rma = await updateRmaStatus(id, RMA_STATUS.REJECTED, reason);
+  const rma = await updateRmaStatus(existing.id, RMA_STATUS.REJECTED, reason);
   if (!rma) {
     const error = new Error("Cannot reject — RMA status changed concurrently");
     error.statusCode = 409;

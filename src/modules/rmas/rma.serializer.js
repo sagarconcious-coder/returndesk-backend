@@ -16,7 +16,8 @@ export const deriveStatusLabel = (rma, repair, shipments) => {
   );
   if (outbound?.status === SHIPMENT_STATUS.DELIVERED) return "Completed";
 
-  if (repair?.status === REPAIR_STATUS.PENDING) return "Repair Pending";
+  if (repair?.status === REPAIR_STATUS.PENDING)
+    return "In Aeidth, Repair Pending";
   if (repair?.status === REPAIR_STATUS.IN_PROGRESS) return "Under Repair";
   if (
     repair?.status === REPAIR_STATUS.COMPLETED ||
@@ -29,10 +30,12 @@ export const deriveStatusLabel = (rma, repair, shipments) => {
     (s) => s.direction === SHIPMENT_DIRECTION.INBOUND,
   );
   if (inbound?.status === SHIPMENT_STATUS.DELIVERED) return "In Aeidth";
-  if (inbound?.status === SHIPMENT_STATUS.OUT_FOR_DELIVERY) return "Out for Delivery";
+  if (inbound?.status === SHIPMENT_STATUS.OUT_FOR_DELIVERY)
+    return "Out for Delivery";
   if (inbound?.status === SHIPMENT_STATUS.IN_TRANSIT) return "In Transit";
   if (inbound?.status === SHIPMENT_STATUS.PICKED_UP) return "Picked Up";
-  if (inbound?.status === SHIPMENT_STATUS.FAILED_DELIVERY) return "Delivery Failed";
+  if (inbound?.status === SHIPMENT_STATUS.FAILED_DELIVERY)
+    return "Delivery Failed";
   if (inbound?.status === SHIPMENT_STATUS.SCHEDULED) return "Pickup Scheduled";
   if (inbound) return "Pending Pickup";
 
@@ -74,13 +77,16 @@ export const serializeShipment = (shipment, rma_number) => ({
   shipped_on: formatDate(shipment.shipped_at),
   eta: formatDate(shipment.delivered_at),
   direction: shipment.direction,
-  // raw fields for admin UI logic (e.g. deciding whether to show "Retry Pickup")
+  // raw fields for admin UI logic (e.g. deciding whether to show "Retry Pickup"/"Retry Shipment")
   awb_code: shipment.awb_code,
   pickup_error: shipment.pickup_error,
   needs_pickup_retry:
-    shipment.direction === SHIPMENT_DIRECTION.INBOUND &&
-    shipment.status === SHIPMENT_STATUS.NOT_SHIPPED &&
-    !shipment.awb_code,
+    shipment.status === SHIPMENT_STATUS.NOT_SHIPPED && !shipment.awb_code,
+  return_address_same_as_pickup: shipment.return_address_same_as_pickup,
+  return_address_line1: shipment.return_address_line1,
+  return_address_city: shipment.return_address_city,
+  return_address_state: shipment.return_address_state,
+  return_address_pincode: shipment.return_address_pincode,
 });
 
 const attachmentType = (fileName, kind) => {
@@ -125,7 +131,10 @@ const buildStatusHistory = (rma, repair, shipments) => {
   }
 
   for (const shipment of shipments) {
-    const leg = shipment.direction === SHIPMENT_DIRECTION.INBOUND ? "Inbound" : "Outbound";
+    const leg =
+      shipment.direction === SHIPMENT_DIRECTION.INBOUND
+        ? "Inbound"
+        : "Outbound";
     if (shipment.status_history?.length) {
       for (const entry of shipment.status_history) {
         history.push({
@@ -205,7 +214,7 @@ export const serializeRmaSummary = (rma, repair, shipments) => {
 // Serializes a full RMA detail response, embedding repair/shipments/attachments
 export const serializeRmaDetail = (
   rma,
-  { repair, shipments, attachments },
+  { repair, shipments, attachments, pickup_address },
 ) => ({
   rma_number: rma.rma_number,
   status: deriveStatusLabel(rma, repair, shipments),
@@ -220,4 +229,16 @@ export const serializeRmaDetail = (
   status_history: buildStatusHistory(rma, repair, shipments),
   shipments: shipments.map((s) => serializeShipment(s, rma.rma_number)),
   attachments: attachments.map(serializeAttachment),
+  repair: repair ? serializeRepair(repair) : null,
+  pickup_address: pickup_address || null,
+});
+
+const serializeRepair = (repair) => ({
+  status: repair.status,
+  technician_name: repair.technician_name,
+  diagnosis: repair.diagnosis,
+  parts_used: repair.parts_used,
+  repair_notes: repair.repair_notes,
+  started_at: formatDate(repair.started_at),
+  completed_at: formatDate(repair.completed_at),
 });

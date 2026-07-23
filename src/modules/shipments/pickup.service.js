@@ -9,12 +9,13 @@ import {
   setShipmentShiprocketInfo,
   setShipmentPickupError,
 } from "./shipment.repository.js";
-import { getRmaById } from "../rmas/rma.repository.js";
+import { getRmaByIdOrNumber } from "../rmas/rma.repository.js";
 import { getDealerById } from "../dealers/dealer.repository.js";
 import {
   resolvePickupAddress,
   resolveShiprocketPickupLocation,
 } from "./shipment-address.helper.js";
+import { getWarehouseAddress } from "./warehouse-address.helper.js";
 import {
   createOrder as createShiprocketOrder,
   assignAwb,
@@ -34,7 +35,7 @@ export const requestPickupForRmas = async (rma_ids) => {
     throw error;
   }
 
-  const rmas = await Promise.all(rma_ids.map((id) => getRmaById(id)));
+  const rmas = await Promise.all(rma_ids.map((id) => getRmaByIdOrNumber(id)));
 
   const missingIndex = rmas.findIndex((rma) => !rma);
   if (missingIndex !== -1) {
@@ -60,7 +61,7 @@ export const requestPickupForRmas = async (rma_ids) => {
   }
 
   const existingShipments = await Promise.all(
-    rma_ids.map((id) => getInboundShipmentByRmaId(id)),
+    rmas.map((rma) => getInboundShipmentByRmaId(rma.id)),
   );
   const alreadyRequestedIndex = existingShipments.findIndex(Boolean);
   if (alreadyRequestedIndex !== -1) {
@@ -107,7 +108,15 @@ export const requestPickupForRmas = async (rma_ids) => {
   // roll back or fail the admin's pickup request.
   await createInboundOrdersForBatch(pickupRequest, shipments);
 
-  return { pickupRequest, shipments: shipments.map((s) => s.shipment) };
+  // Re-fetch — createInboundOrdersForBatch updates awb_code/pickup_error in
+  // the DB via shipment.id, not on these in-memory objects, so the admin's
+  // response needs a fresh read to reflect whether Shiprocket actually
+  // succeeded (used by the frontend to show a real success/failure message).
+  const finalShipments = await Promise.all(
+    shipments.map((s) => getShipmentById(s.shipment.id)),
+  );
+
+  return { pickupRequest, shipments: finalShipments };
 };
 
 // B) retryPickupForShipment(shipment_id)
@@ -135,7 +144,7 @@ export const retryPickupForShipment = async (shipment_id) => {
     throw error;
   }
 
-  const rma = await getRmaById(shipment.rma_id);
+  const rma = await getRmaByIdOrNumber(shipment.rma_id);
   if (!rma) {
     const error = new Error("RMA not found");
     error.statusCode = 404;
@@ -212,7 +221,8 @@ export const cancelPickupForShipment = async (shipment_id) => {
 };
 
 // Helper: registers this RMA's own pickup address as a Shiprocket pickup
-// location, creates its inbound Shiprocket order, and marks the shipment
+// location, creates its inbound Shiprocket order — courier picks up from the
+// dealer and delivers to the Aeidth warehouse — and marks the shipment
 // SCHEDULED only once it has a real AWB — a courier order with no AWB isn't
 // actually scheduled, so it's left retryable (status stays NOT_SHIPPED,
 // which is what needs_pickup_retry keys off of). Throws on failure — callers
@@ -225,7 +235,7 @@ const createInboundOrder = async (rma, shipment) => {
   const order = await createShiprocketOrder({
     pickup_location: pickupLocation,
     order_id: shipment.id,
-    customer: address,
+    customer: getWarehouseAddress(),
   });
   await setShipmentShiprocketInfo(shipment.id, {
     shiprocket_shipment_id: order.shipment_id,
