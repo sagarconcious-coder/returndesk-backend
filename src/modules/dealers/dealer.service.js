@@ -287,7 +287,7 @@ export const changeMyPassword = async (
   const isMatch = await bcrypt.compare(current_password, dealer.password);
   if (!isMatch) {
     const error = new Error("Current password is incorrect");
-    error.statusCode = 401;
+    error.statusCode = 400;
     throw error;
   }
 

@@ -19,6 +19,7 @@ import {
   assignAwb,
 } from "../../common/services/shiprocket.service.js";
 import logger from "../../config/logger.js";
+import pool from "../../config/db.js";
 
 // A) getAllShipments(status, direction) — admin list view
 export const getAllShipments = async (status, direction) => {
@@ -277,21 +278,39 @@ export const updateShipmentStatus = async (id, fields) => {
     patch.delivered_at = new Date();
   }
 
-  const shipment = await shipmentRepo.updateShipment(id, patch);
-  if (fields.status && fields.status !== existing.status) {
-    await shipmentRepo.insertShipmentStatusHistory(id, fields.status);
-  }
+  // The status update, its history-audit row, and the auto-created repair
+  // record must land together — a crash between any two of these would
+  // otherwise leave the shipment's status ahead of its own audit trail, or
+  // (worse) a DELIVERED inbound shipment with no repair row and no legal
+  // transition left to retry from. See status_history migration rationale.
+  const client = await pool.connect();
+  let shipment;
+  try {
+    await client.query("BEGIN");
 
-  // Item has physically arrived at aeidth from the dealer — kick off the
-  // repair record (PENDING) so it shows up for an admin to pick up and start.
-  if (
-    existing.direction === SHIPMENT_DIRECTION.INBOUND &&
-    fields.status === SHIPMENT_STATUS.DELIVERED
-  ) {
-    const repair = await getRepairByRmaId(shipment.rma_id);
-    if (!repair) {
-      await createRepair(shipment.rma_id);
+    shipment = await shipmentRepo.updateShipment(id, patch, client);
+    if (fields.status && fields.status !== existing.status) {
+      await shipmentRepo.insertShipmentStatusHistory(id, fields.status, client);
     }
+
+    // Item has physically arrived at aeidth from the dealer — kick off the
+    // repair record (PENDING) so it shows up for an admin to pick up and start.
+    if (
+      existing.direction === SHIPMENT_DIRECTION.INBOUND &&
+      fields.status === SHIPMENT_STATUS.DELIVERED
+    ) {
+      const repair = await getRepairByRmaId(shipment.rma_id, client);
+      if (!repair) {
+        await createRepair(shipment.rma_id, client);
+      }
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 
   const rma = await getRmaById(shipment.rma_id);

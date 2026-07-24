@@ -1,5 +1,8 @@
 import express from "express";
-import { authenticate } from "../../common/middleware/auth.middleware.js";
+import {
+  authenticate,
+  requireDealer,
+} from "../../common/middleware/auth.middleware.js";
 import {
   createRmaController,
   getRmaByIdController,
@@ -11,17 +14,33 @@ import {
 
 const router = express.Router();
 
-// Dealer routes — require valid JWT; identity comes from the token, not the request
-router.post("/create", authenticate, createRmaController);
-router.get("/my-rmas", authenticate, getRmasByDealerIdController);
+// Dealer routes — require valid JWT + dealer role; identity comes from the token, not the request
+router.post("/create", authenticate, requireDealer, createRmaController);
+router.get(
+  "/my-rmas",
+  authenticate,
+  requireDealer,
+  getRmasByDealerIdController,
+);
 router.get(
   "/shipping-estimate",
   authenticate,
+  requireDealer,
   getShippingEstimateForDealerController,
 );
 
-router.get("/:id/shipments", authenticate, getRmaShipmentsController);
-router.get("/:id/repair", authenticate, getRmaRepairController);
-router.get("/:id", authenticate, getRmaByIdController);
+router.get(
+  "/:id/shipments",
+  authenticate,
+  requireDealer,
+  getRmaShipmentsController,
+);
+router.get(
+  "/:id/repair",
+  authenticate,
+  requireDealer,
+  getRmaRepairController,
+);
+router.get("/:id", authenticate, requireDealer, getRmaByIdController);
 
 export default router;

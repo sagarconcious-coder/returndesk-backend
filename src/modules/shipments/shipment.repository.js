@@ -147,9 +147,9 @@ export const getShipmentByAwb = async (awb_code) => {
 };
 
 //////////////////////////////////////// 4) UPDATE SHIPMENT (carrier, tracking, status)
-export const updateShipment = async (id, fields) => {
+export const updateShipment = async (id, fields, client = pool) => {
   const { carrier, tracking_number, status, shipped_at, delivered_at } = fields;
-  const result = await pool.query(
+  const result = await client.query(
     `
     UPDATE rma_shipments
     SET carrier = COALESCE($1, carrier),
@@ -195,8 +195,8 @@ export const setShipmentShiprocketInfo = async (
 };
 
 //////////////////////////////////////// 4b-2) RECORD a shipment status transition for the audit/history timeline
-export const insertShipmentStatusHistory = async (shipment_id, status) => {
-  await pool.query(
+export const insertShipmentStatusHistory = async (shipment_id, status, client = pool) => {
+  await client.query(
     `INSERT INTO shipment_status_history (shipment_id, status) VALUES ($1, $2)`,
     [shipment_id, status],
   );

@@ -4,6 +4,9 @@ import {
   getMyNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  getAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead,
 } from "./notification.service.js";
 
 // Backend notification types -> the small UI-type vocabulary the frontend renders icons/colors for
@@ -14,6 +17,7 @@ const UI_TYPE_MAP = {
   [NOTIFICATION_TYPE.REPAIR_COMPLETED]: "completed",
   [NOTIFICATION_TYPE.REPAIR_UNREPAIRABLE]: "rejected",
   [NOTIFICATION_TYPE.SHIPMENT_UPDATED]: "pickup",
+  [NOTIFICATION_TYPE.RMA_CREATED]: "new",
 };
 
 const serializeNotification = (n) => ({
@@ -86,6 +90,42 @@ export const markAllNotificationsReadController = async (req, res, next) => {
   try {
     const dealer_id = req.user?.dealerId || req.user?.dealer_id;
     await markAllNotificationsRead(dealer_id);
+    successResponse(res, null, "All notifications marked as read");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/admin/notifications
+export const getAdminNotificationsController = async (req, res, next) => {
+  try {
+    const unreadOnly = req.query.unread === "true";
+    const notifications = await getAdminNotifications(unreadOnly);
+    successResponse(
+      res,
+      notifications.map(serializeNotification),
+      "Notifications fetched successfully",
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/admin/notifications/:id/read
+export const markAdminNotificationReadController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const notification = await markAdminNotificationRead(id);
+    successResponse(res, notification, "Notification marked as read");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/admin/notifications/read-all
+export const markAllAdminNotificationsReadController = async (req, res, next) => {
+  try {
+    await markAllAdminNotificationsRead();
     successResponse(res, null, "All notifications marked as read");
   } catch (error) {
     next(error);

@@ -62,6 +62,7 @@ const shipmentStatusLabel = (status) => {
     OUT_FOR_DELIVERY: "Out for Delivery",
     DELIVERED: "Delivered",
     FAILED_DELIVERY: "Failed Delivery",
+    CANCELLED: "Cancelled",
   };
   return map[status] || status;
 };

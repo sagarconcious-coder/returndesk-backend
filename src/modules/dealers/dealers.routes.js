@@ -21,7 +21,10 @@ import {
   getMyNotificationsUiController,
   markAllNotificationsReadUiController,
 } from "../notifications/notification.controller.js";
-import { authenticate } from "../../common/middleware/auth.middleware.js";
+import {
+  authenticate,
+  requireDealer,
+} from "../../common/middleware/auth.middleware.js";
 import {
   loginLimiter,
   otpRequestLimiter,
@@ -38,26 +41,48 @@ router.post("/verify-otp", otpVerifyLimiter, verifyOtpController);
 router.post("/register", registerDealerController);
 router.post("/login", loginLimiter, loginDealerController);
 
-//////////////////////////////////////////////////////////////// 2)  Dealer routes - require valid JWT
-router.get("/dashboard/stats", authenticate, getDashboardStatsController);
-router.get("/dashboard/recent-rmas", authenticate, getRecentRmasController);
+//////////////////////////////////////////////////////////////// 2)  Dealer routes - require valid JWT + dealer role
+router.get(
+  "/dashboard/stats",
+  authenticate,
+  requireDealer,
+  getDashboardStatsController,
+);
+router.get(
+  "/dashboard/recent-rmas",
+  authenticate,
+  requireDealer,
+  getRecentRmasController,
+);
 
 router.get(
   "/shipments/track/:trackingNumber",
   authenticate,
+  requireDealer,
   trackShipmentController,
 );
-router.get("/shipments", authenticate, getMyShipmentsController);
+router.get("/shipments", authenticate, requireDealer, getMyShipmentsController);
 
-router.get("/notifications", authenticate, getMyNotificationsUiController);
+router.get(
+  "/notifications",
+  authenticate,
+  requireDealer,
+  getMyNotificationsUiController,
+);
 router.post(
   "/notifications/mark-read",
   authenticate,
+  requireDealer,
   markAllNotificationsReadUiController,
 );
 
-router.get("/profile", authenticate, getProfileController);
-router.put("/profile", authenticate, updateProfileController);
-router.post("/profile/change-password", authenticate, changePasswordController);
+router.get("/profile", authenticate, requireDealer, getProfileController);
+router.put("/profile", authenticate, requireDealer, updateProfileController);
+router.post(
+  "/profile/change-password",
+  authenticate,
+  requireDealer,
+  changePasswordController,
+);
 
 export default router;

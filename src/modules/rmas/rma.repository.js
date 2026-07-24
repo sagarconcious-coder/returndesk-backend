@@ -1,6 +1,6 @@
 import pool from "../../config/db.js";
 
-export const createRma = async (data) => {
+export const createRma = async (data, client = pool) => {
   const {
     dealer_id,
     product_serial,
@@ -16,7 +16,7 @@ export const createRma = async (data) => {
     pickup_state,
     pickup_pincode,
   } = data;
-  const result = await pool.query(
+  const result = await client.query(
     `INSERT INTO rmas (
        dealer_id, product_serial, product_name, issue_type,
        issue_description, purchase_date, warranty_status, warranty_expiry,
@@ -42,8 +42,8 @@ export const createRma = async (data) => {
   return result.rows[0];
 };
 
-export const createRmaAttachments = async (rma_id, attachments) => {
-  const result = await pool.query(
+export const createRmaAttachments = async (rma_id, attachments, client = pool) => {
+  const result = await client.query(
     `INSERT INTO rma_attachments (rma_id, file_name, file_url, kind)
      SELECT $1, a.file_name, a.file_url, a.kind
      FROM UNNEST($2::text[], $3::text[], $4::text[]) AS a(file_name, file_url, kind)

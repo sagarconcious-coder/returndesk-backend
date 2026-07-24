@@ -1,9 +1,13 @@
 import pool from "../../config/db.js";
 
-export const createRepair = async (rma_id) => {
+export const createRepair = async (rma_id, client = pool) => {
   //TODO: Change the function in future
-  const result = await pool.query(
-    `INSERT INTO repairs (rma_id) VALUES ($1) RETURNING *`,
+  // ON CONFLICT DO NOTHING guards the repairs.rma_id UNIQUE constraint —
+  // concurrent callers (e.g. duplicate Shiprocket webhook deliveries) racing
+  // to auto-create the repair row for the same RMA no longer throw an
+  // unhandled 23505; the loser just gets no row back.
+  const result = await client.query(
+    `INSERT INTO repairs (rma_id) VALUES ($1) ON CONFLICT (rma_id) DO NOTHING RETURNING *`,
     [rma_id],
   );
   return result.rows[0];
@@ -11,8 +15,8 @@ export const createRepair = async (rma_id) => {
 
 /////////////////////// GET REPAIR BY SPECIFIC RMA_ID
 
-export const getRepairByRmaId = async (rma_id) => {
-  const result = await pool.query(`SELECT * FROM repairs WHERE rma_id=$1`, [
+export const getRepairByRmaId = async (rma_id, client = pool) => {
+  const result = await client.query(`SELECT * FROM repairs WHERE rma_id=$1`, [
     rma_id,
   ]);
   return result.rows[0];
@@ -50,7 +54,13 @@ export const getRepairsByDealerId = async (dealer_id) => {
 };
 
 ///////////////////////// UPDATE REPAIR INFO
-export const updateRepair = async (rma_id, fields) => {
+// expectedStatus (optional): when set, the UPDATE only applies if the repair's
+// *current* status still matches it — an atomic compare-and-swap guard against
+// two concurrent admin actions (or a duplicate webhook-triggered call) racing
+// the same status transition, mirroring the pattern already used for
+// rmas.status (rma.repository.js updateRmaStatus) and shipment transitions.
+// Returns undefined if the row didn't match (either wrong rma_id or stale status).
+export const updateRepair = async (rma_id, fields, expectedStatus = null) => {
   //TODO: Change the function in future
 
   const {
@@ -62,8 +72,17 @@ export const updateRepair = async (rma_id, fields) => {
     started_at,
     completed_at,
   } = fields;
-  const result = await pool.query(
-    `
+  const params = [
+    technician_name ?? null,
+    status ?? null,
+    diagnosis ?? null,
+    parts_used ?? null,
+    repair_notes ?? null,
+    started_at ?? null,
+    completed_at ?? null,
+    rma_id,
+  ];
+  let query = `
     UPDATE repairs
     SET technician_name = COALESCE($1,technician_name),
     status = COALESCE($2,status),
@@ -74,19 +93,12 @@ export const updateRepair = async (rma_id, fields) => {
     completed_at = COALESCE($7, completed_at),
     updated_at = NOW()
     WHERE rma_id = $8
-    RETURNING *
-    
-    `,
-    [
-      technician_name ?? null,
-      status ?? null,
-      diagnosis ?? null,
-      parts_used ?? null,
-      repair_notes ?? null,
-      started_at ?? null,
-      completed_at ?? null,
-      rma_id,
-    ],
-  );
+  `;
+  if (expectedStatus) {
+    params.push(expectedStatus);
+    query += ` AND status = $${params.length}`;
+  }
+  query += ` RETURNING *`;
+  const result = await pool.query(query, params);
   return result.rows[0];
 };

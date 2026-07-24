@@ -38,11 +38,24 @@ export const startRepair = async (rma_id, technician_name) => {
     throw error;
   }
 
-  const updated = await updateRepairInRepo(rma.id, {
-    technician_name,
-    status: REPAIR_STATUS.IN_PROGRESS,
-    started_at: new Date(),
-  });
+  // expectedStatus=PENDING makes this an atomic compare-and-swap: two
+  // concurrent "start repair" calls can both pass the check above, but only
+  // one UPDATE actually matches (the other finds status already flipped to
+  // IN_PROGRESS and updates zero rows).
+  const updated = await updateRepairInRepo(
+    rma.id,
+    {
+      technician_name,
+      status: REPAIR_STATUS.IN_PROGRESS,
+      started_at: new Date(),
+    },
+    REPAIR_STATUS.PENDING,
+  );
+  if (!updated) {
+    const error = new Error("Repair already started for this RMA");
+    error.statusCode = 409;
+    throw error;
+  }
   await notifyRepairStarted(rma);
   return updated;
 };
@@ -96,14 +109,34 @@ export const completeRepair = async (rma_id, repair_notes) => {
     error.statusCode = 404;
     throw error;
   }
-  const repair = await updateRepairInRepo(rma.id, {
-    status: REPAIR_STATUS.COMPLETED,
-    repair_notes,
-    completed_at: new Date(),
-  });
-  if (!repair) {
+  const existing = await getRepairByRmaIdFromRepo(rma.id);
+  if (!existing) {
     const error = new Error("Repair not found");
     error.statusCode = 404;
+    throw error;
+  }
+  if (existing.status !== REPAIR_STATUS.IN_PROGRESS) {
+    const error = new Error(
+      `Cannot complete repair — current status is ${existing.status}, expected IN_PROGRESS`,
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const repair = await updateRepairInRepo(
+    rma.id,
+    {
+      status: REPAIR_STATUS.COMPLETED,
+      repair_notes,
+      completed_at: new Date(),
+    },
+    REPAIR_STATUS.IN_PROGRESS,
+  );
+  if (!repair) {
+    const error = new Error(
+      `Cannot complete repair — current status is no longer IN_PROGRESS`,
+    );
+    error.statusCode = 409;
     throw error;
   }
   await notifyRepairCompleted(rma);
@@ -119,14 +152,34 @@ export const markUnrepairable = async (rma_id, repair_notes) => {
     error.statusCode = 404;
     throw error;
   }
-  const repair = await updateRepairInRepo(rma.id, {
-    status: REPAIR_STATUS.UNREPAIRABLE,
-    repair_notes,
-    completed_at: new Date(),
-  });
-  if (!repair) {
+  const existing = await getRepairByRmaIdFromRepo(rma.id);
+  if (!existing) {
     const error = new Error("Repair not found");
     error.statusCode = 404;
+    throw error;
+  }
+  if (existing.status !== REPAIR_STATUS.IN_PROGRESS) {
+    const error = new Error(
+      `Cannot mark unrepairable — current status is ${existing.status}, expected IN_PROGRESS`,
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const repair = await updateRepairInRepo(
+    rma.id,
+    {
+      status: REPAIR_STATUS.UNREPAIRABLE,
+      repair_notes,
+      completed_at: new Date(),
+    },
+    REPAIR_STATUS.IN_PROGRESS,
+  );
+  if (!repair) {
+    const error = new Error(
+      `Cannot mark unrepairable — current status is no longer IN_PROGRESS`,
+    );
+    error.statusCode = 409;
     throw error;
   }
   await notifyRepairUnrepairable(rma);
