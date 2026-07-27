@@ -6,7 +6,10 @@ import {
   OTP_PURPOSE,
 } from "../../common/constants/status.constants.js";
 import { generateOtp, getOtpExpiry } from "../../common/utils/otp.util.js";
-import { sendOtpEmail } from "../../common/utils/email.utils.js";
+import {
+  sendOtpEmail,
+  sendPasswordResetOtpEmail,
+} from "../../common/utils/email.utils.js";
 import {
   createOtp,
   getPendingOtp,
@@ -307,3 +310,77 @@ const serializeProfile = (dealer) => ({
   pincode: dealer.pincode,
   gst_number: dealer.gst_number,
 });
+
+///////////////////////////////////// Forgot Password
+
+export const forgotPassword = async (email) => {
+  const dealer = await getDealerByEmail(email);
+
+  if (!dealer || dealer.status !== DEALER_STATUS.ACTIVE) {
+    return { message: "If that email exists , an OTP has been sent" };
+  }
+
+  const existingOtp = await getLatestOtp(email, OTP_PURPOSE.PASSWORD_RESET);
+  if (existingOtp) {
+    const secondsSinceLastSend =
+      (Date.now() - new Date(existingOtp.created_at).getTime()) / 1000;
+    if (secondsSinceLastSend < OTP_RESEND_COOLDOWN_SECONDS) {
+      const waitseconds = Math.ceil(
+        OTP_RESEND_COOLDOWN_SECONDS - secondsSinceLastSend,
+      );
+      const error = new Error(
+        `Please wait ${waitseconds}s before requesting another OTP`,
+      );
+      error.statusCode = 429;
+      error.retryAfter = waitseconds;
+      throw error;
+    }
+  }
+
+  const otp = generateOtp();
+  const expiresAt = getOtpExpiry(10);
+  await createOtp(email, otp, expiresAt, OTP_PURPOSE.PASSWORD_RESET);
+
+  try {
+    await sendPasswordResetOtpEmail(email, otp);
+  } catch (error) {
+    const emailError = new Error("Failed to send OTP email, please try again");
+    emailError.statusCode = 502;
+    throw emailError;
+  }
+
+  return {
+    message: "If that email exists , an OTP has been sent",
+    retryAfter: OTP_RESEND_COOLDOWN_SECONDS,
+  };
+};
+
+export const resetPassword = async (email, otp, new_password) => {
+  const otpRecord = await getPendingOtp(email, OTP_PURPOSE.PASSWORD_RESET);
+  if (!otpRecord) {
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+    const error = new Error(
+      "Too many incorrect attempts- please request a new OTP",
+    );
+    error.statusCode = 429;
+    throw error;
+  }
+  if (otpRecord.otp !== otp) {
+    await incrementOtpAttempts(otpRecord.id);
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+  await markOtpVerified(otpRecord.id);
+
+  const dealer = await getDealerByEmail(email);
+  const hashedPassword = await bcrypt.hash(new_password, 10);
+  await updateDealerPassword(dealer.id, hashedPassword);
+
+  return { message: "Password reset successfully" };
+};

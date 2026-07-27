@@ -20,6 +20,7 @@ export const RMA_STATUS = {
 
 export const OTP_PURPOSE = {
   REGISTRATION: "REGISTRATION",
+  PASSWORD_RESET: "PASSWORD_RESET",
 };
 
 export const REPAIR_STATUS = {

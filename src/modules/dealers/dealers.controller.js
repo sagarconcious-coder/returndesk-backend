@@ -11,6 +11,8 @@ import {
   getMyProfile,
   updateMyProfile,
   changeMyPassword,
+  forgotPassword,
+  resetPassword,
 } from "./dealer.service.js";
 
 // POST /api/dealers/request-otp
@@ -138,8 +140,36 @@ export const changePasswordController = async (req, res, next) => {
   try {
     const dealer_id = req.user?.dealerId || req.user?.dealer_id;
     const { current_password, new_password } = req.body;
-    const result = await changeMyPassword(dealer_id, current_password, new_password);
+    const result = await changeMyPassword(
+      dealer_id,
+      current_password,
+      new_password,
+    );
     successResponse(res, result, "Password changed successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/dealers/forgot-password
+
+export const forgotPasswordController = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const result = await forgotPassword(email);
+    successResponse(res, result, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/dealers/reset-password
+
+export const resetPasswordController = async (req, res, next) => {
+  try {
+    const { email, otp, new_password } = req.body;
+    const result = await resetPassword(email, otp, new_password);
+    successResponse(res, result, result.message);
   } catch (error) {
     next(error);
   }

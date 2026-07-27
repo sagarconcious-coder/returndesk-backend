@@ -1,13 +1,18 @@
 import pool from "../../config/db.js";
 
-export const createOtp = async (email, otp, expiresAt) => {
+export const createOtp = async (
+  email,
+  otp,
+  expiresAt,
+  purpose = "REGISTRATION",
+) => {
   const result = await pool.query(
-    `INSERT INTO otps (email, otp, expires_at, verified, attempts)
-     VALUES ($1, $2, $3, false, 0)
+    `INSERT INTO otps (email, otp,purpose, expires_at, verified, attempts)
+     VALUES ($1, $2, $3, $4, false, 0)
      ON CONFLICT (email)
-     DO UPDATE SET otp = $2, expires_at = $3, verified = false, attempts = 0
+     DO UPDATE SET otp = $2,purpose=$3, expires_at = $4, verified = false, attempts = 0
      RETURNING *`,
-    [email, otp, expiresAt],
+    [email, otp, purpose, expiresAt],
   );
   return result.rows[0];
 };
@@ -15,11 +20,11 @@ export const createOtp = async (email, otp, expiresAt) => {
 // Returns the pending (unverified, unexpired) OTP record for this email
 // regardless of whether the submitted code matches — callers need this to
 // track/increment wrong-attempt counts even on a mismatch.
-export const getPendingOtp = async (email) => {
+export const getPendingOtp = async (email, purpose = "REGISTRATION") => {
   const result = await pool.query(
     `SELECT * FROM otps
-     WHERE email = $1 AND verified = false AND expires_at > NOW()`,
-    [email],
+     WHERE email = $1 AND purpose=$2 AND verified = false AND expires_at > NOW()`,
+    [email, purpose],
   );
   return result.rows[0];
 };
@@ -32,8 +37,11 @@ export const incrementOtpAttempts = async (id) => {
   return result.rows[0];
 };
 
-export const getLatestOtp = async (email) => {
-  const result = await pool.query(`SELECT * FROM otps WHERE email=$1`, [email]);
+export const getLatestOtp = async (email, purpose = "REGISTRATION") => {
+  const result = await pool.query(
+    `SELECT * FROM otps WHERE email=$1 AND purpose=$2`,
+    [email, purpose],
+  );
   return result.rows[0];
 };
 export const markOtpVerified = async (id) => {

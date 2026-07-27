@@ -7,6 +7,8 @@ import {
   getProfileController,
   updateProfileController,
   changePasswordController,
+  forgotPasswordController,
+  resetPasswordController,
 } from "./dealers.controller.js";
 import {
   getDashboardStatsController,
@@ -40,7 +42,8 @@ router.post("/request-otp", otpRequestLimiter, requestOtpController);
 router.post("/verify-otp", otpVerifyLimiter, verifyOtpController);
 router.post("/register", registerDealerController);
 router.post("/login", loginLimiter, loginDealerController);
-
+router.post("/forgot-password", otpRequestLimiter, forgotPasswordController);
+router.post("/reset-password", otpVerifyLimiter, resetPasswordController);
 //////////////////////////////////////////////////////////////// 2)  Dealer routes - require valid JWT + dealer role
 router.get(
   "/dashboard/stats",

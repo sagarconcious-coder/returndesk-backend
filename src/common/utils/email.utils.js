@@ -17,3 +17,14 @@ export const sendOtpEmail = async (email, otp) => {
   });
   return res;
 };
+
+//////////////////////// Send OTP for password reset
+export const sendPasswordResetOtpEmail = async (email, otp) => {
+  const res = await transporter.sendMail({
+    from: process.env.GMAIL_USER,
+    to: email,
+    subject: "Password Reset OTP",
+    html: `<p> Your password reset OTP is <strong>${otp}</strong>. It expires in 10 minutes</p>`,
+  });
+  return res;
+};
